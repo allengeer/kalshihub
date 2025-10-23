@@ -27,6 +27,7 @@ PyYAML>=6.0.0
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.5.0
+pre-commit>=4.0.0
 
 # Logging and monitoring
 structlog>=23.0.0

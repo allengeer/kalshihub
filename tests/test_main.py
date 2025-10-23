@@ -1,7 +1,6 @@
 """Tests for the main application module."""
 
 import asyncio
-import logging
 from unittest.mock import patch
 
 import pytest
@@ -33,4 +32,5 @@ class TestMain:
     def test_main_module_imports(self):
         """Test that main module can be imported without errors."""
         from src import main
+
         assert main is not None

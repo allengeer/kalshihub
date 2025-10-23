@@ -1,6 +1,5 @@
 """Tests for CI workflow functionality."""
 
-import os
 from pathlib import Path
 
 import pytest
@@ -44,11 +43,13 @@ class TestCIWorkflow:
         with open(workflow_path, "r") as file:
             workflow_config = yaml.safe_load(file)
 
-        # Check required top-level keys (handle PyYAML's interpretation of 'on' as boolean)
+        # Check required top-level keys (handle PyYAML's interpretation of 'on')
         assert "name" in workflow_config, "Workflow should have 'name' key"
         assert "jobs" in workflow_config, "Workflow should have 'jobs' key"
         # Check for 'on' key - it might be parsed as boolean True by PyYAML
-        assert True in workflow_config or "on" in workflow_config, "Workflow should have 'on' key"
+        assert (
+            True in workflow_config or "on" in workflow_config
+        ), "Workflow should have 'on' key"
 
     def test_ci_workflow_triggers(self):
         """Test that CI workflow has correct triggers."""

@@ -107,6 +107,13 @@ exposure and enforces position limits based on market volatility.
 - Type hints required for all public functions
 - Docstrings required for all classes and functions
 
+#### Pre-commit Hooks
+- **Mandatory**: Run CI checks locally before committing
+- Install pre-commit hooks: `make pre-commit-install`
+- Run all CI checks locally: `make ci-local`
+- Pre-commit hooks automatically run on commit and push
+- **Never commit code that fails local CI checks**
+
 #### Testing Strategy
 - **Unit Tests**: Test individual components in isolation
 - **Integration Tests**: Test component interactions
