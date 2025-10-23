@@ -33,6 +33,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Dependency caching for faster builds
 - Comprehensive test suite for CI workflow functionality
 - Gherkin scenarios for CI workflow feature validation
+- Behave BDD testing integration:
+  - Added Behave framework for running Gherkin scenarios
+  - Created step definitions for existing Gherkin scenarios
+  - Integrated BDD tests into CI workflow and pre-commit hooks
+  - Added BDD testing commands to Makefile
+  - Updated documentation with BDD testing instructions
 
 ### Changed
 - Nothing yet

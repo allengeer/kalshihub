@@ -10,6 +10,9 @@ install: ## Install dependencies
 test: ## Run tests with coverage
 	python -m pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
 
+bdd: ## Run BDD tests with Behave
+	behave features/ -v
+
 lint: ## Run linting
 	flake8 src/ tests/ --max-line-length=88
 	mypy src/
@@ -49,8 +52,9 @@ pre-commit-install: ## Install pre-commit hooks
 pre-commit-run: ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
-ci-local: ## Run all CI checks locally (format, lint, test)
+ci-local: ## Run all CI checks locally (format, lint, test, bdd)
 	black --check src/ tests/
 	flake8 src/ tests/ --max-line-length=88
 	mypy src/
 	python -m pytest tests/ --cov=src --cov-fail-under=80
+	behave features/ -v

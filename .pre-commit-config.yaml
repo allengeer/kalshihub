@@ -38,3 +38,10 @@ repos:
         pass_filenames: false
         always_run: true
         stages: [pre-push]
+      - id: behave
+        name: behave
+        entry: behave features/ -v
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
