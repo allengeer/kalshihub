@@ -73,9 +73,10 @@ async def main():
             if filtered_markets:
                 print("\nSample filtered markets:")
                 for i, market in enumerate(filtered_markets[:3], 1):
-                    close_date = datetime.fromtimestamp(market.close_time)
                     print(f"  {i}. {market.ticker}: {market.title}")
-                    print(f"     Closes: {close_date.strftime('%Y-%m-%d %H:%M')}")
+                    print(
+                        f"     Closes: {market.close_time.strftime('%Y-%m-%d %H:%M')}"
+                    )
         except Exception as e:
             print(f"❌ Error getting filtered markets: {e}")
 
