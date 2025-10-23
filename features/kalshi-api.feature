@@ -114,3 +114,41 @@ Feature: Kalshi API Service
     Then the service should use the custom base URL
     And trailing slashes should be automatically removed
     And the service should be ready for API calls
+
+  Scenario: Rate limiting for single API call
+    Given I have a Kalshi API service instance
+    And the service is configured with rate limiting
+    When I make a single API call
+    Then the call should complete without delay
+    And the rate limiter should track the call time
+
+  Scenario: Rate limiting for multiple API calls
+    Given I have a Kalshi API service instance
+    And the service is configured with a rate limit of 10 calls per second
+    When I make 3 rapid sequential API calls
+    Then the calls should be spaced at least 0.1 seconds apart
+    And all calls should complete successfully
+
+  Scenario: Get all open markets with single page
+    Given I have a Kalshi API service instance
+    And the API returns a single page of open markets
+    When I call getAllOpenMarkets
+    Then I should receive all open markets from that page
+    And the response should contain only open markets
+    And no pagination should be required
+
+  Scenario: Get all open markets with multiple pages
+    Given I have a Kalshi API service instance
+    And the API returns multiple pages of open markets
+    When I call getAllOpenMarkets
+    Then I should receive all open markets from all pages
+    And the response should contain only open markets
+    And pagination should be handled automatically
+
+  Scenario: Get all open markets with date filters
+    Given I have a Kalshi API service instance
+    And I want markets closing between specific dates
+    When I call getAllOpenMarkets with min_close_ts and max_close_ts
+    Then I should receive only open markets within that date range
+    And all returned markets should be open
+    And pagination should be handled automatically

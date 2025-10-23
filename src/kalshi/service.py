@@ -1,5 +1,6 @@
 """Kalshi API service for interacting with the Kalshi prediction market API."""
 
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Dict, List, Optional
@@ -56,10 +57,10 @@ class Market:
     risk_limit_cents: int
     rules_primary: str
     rules_secondary: str
-    settlement_value: int
-    settlement_value_dollars: str
-    price_level_structure: str
-    price_ranges: List[Dict[str, str]]
+    settlement_value: Optional[int] = None
+    settlement_value_dollars: Optional[str] = None
+    price_level_structure: Optional[str] = None
+    price_ranges: Optional[List[Dict[str, str]]] = None
 
 
 @dataclass
@@ -73,14 +74,21 @@ class MarketsResponse:
 class KalshiAPIService:
     """Service for interacting with the Kalshi prediction market API."""
 
-    def __init__(self, base_url: str = "https://api.elections.kalshi.com/trade-api/v2"):
+    def __init__(
+        self,
+        base_url: str = "https://api.elections.kalshi.com/trade-api/v2",
+        rate_limit: float = 20.0,
+    ):
         """Initialize the Kalshi API service.
 
         Args:
             base_url: Base URL for the Kalshi API
+            rate_limit: Maximum number of API calls per second (default: 20)
         """
         self.base_url = base_url.rstrip("/")
         self._client: Optional[httpx.AsyncClient] = None
+        self._rate_limit = rate_limit
+        self._last_call_time: float = 0.0
 
     async def __aenter__(self):
         """Async context manager entry."""
@@ -99,8 +107,24 @@ class KalshiAPIService:
             self._client = httpx.AsyncClient(timeout=30.0)
         return self._client
 
+    async def _rate_limit_call(self):
+        """Apply rate limiting to API calls."""
+        current_time = asyncio.get_event_loop().time()
+        time_since_last_call = current_time - self._last_call_time
+        min_interval = 1.0 / self._rate_limit
+
+        if time_since_last_call < min_interval:
+            await asyncio.sleep(min_interval - time_since_last_call)
+
+        self._last_call_time = asyncio.get_event_loop().time()
+
     def _parse_market(self, market_data: Dict[str, Any]) -> Market:
         """Parse market data from API response into Market object."""
+
+        def get_field(key: str, default: Any = None):
+            """Get field from market_data with default value."""
+            return market_data.get(key, default)
+
         return Market(
             ticker=market_data["ticker"],
             event_ticker=market_data["event_ticker"],
@@ -155,10 +179,10 @@ class KalshiAPIService:
             risk_limit_cents=market_data["risk_limit_cents"],
             rules_primary=market_data["rules_primary"],
             rules_secondary=market_data["rules_secondary"],
-            settlement_value=market_data["settlement_value"],
-            settlement_value_dollars=market_data["settlement_value_dollars"],
-            price_level_structure=market_data["price_level_structure"],
-            price_ranges=market_data["price_ranges"],
+            settlement_value=get_field("settlement_value"),
+            settlement_value_dollars=get_field("settlement_value_dollars"),
+            price_level_structure=get_field("price_level_structure"),
+            price_ranges=get_field("price_ranges"),
         )
 
     async def get_markets(
@@ -216,6 +240,9 @@ class KalshiAPIService:
         if tickers is not None:
             params["tickers"] = tickers
 
+        # Apply rate limiting
+        await self._rate_limit_call()
+
         # Make API request
         client = self._get_client()
         url = f"{self.base_url}/markets"
@@ -241,6 +268,65 @@ class KalshiAPIService:
             raise ValueError(f"Invalid response format: missing {e}") from e
         except Exception as e:
             raise RuntimeError(f"Unexpected error: {e}") from e
+
+    async def getAllOpenMarkets(
+        self,
+        min_close_ts: Optional[int] = None,
+        max_close_ts: Optional[int] = None,
+        event_ticker: Optional[str] = None,
+        series_ticker: Optional[str] = None,
+        tickers: Optional[str] = None,
+    ) -> List[Market]:
+        """Get all open markets by automatically handling pagination.
+
+        This method aggregates all open markets across multiple API calls,
+        automatically handling pagination to retrieve the complete dataset.
+
+        Args:
+            min_close_ts: Filter markets that close after this Unix timestamp
+            max_close_ts: Filter markets that close before this Unix timestamp
+            event_ticker: Filter markets by event ticker
+            series_ticker: Filter markets by series ticker
+            tickers: Filter by specific market tickers (comma-separated)
+
+        Returns:
+            List of all open markets matching the criteria
+
+        Raises:
+            httpx.HTTPError: If any API request fails
+            ValueError: If invalid parameters are provided
+        """
+        all_markets: List[Market] = []
+        cursor: Optional[str] = None
+        limit = 1000  # Use maximum limit for efficiency
+
+        while True:
+            # Get markets for current page
+            response = await self.get_markets(
+                limit=limit,
+                cursor=cursor,
+                status="open",
+                min_close_ts=min_close_ts,
+                max_close_ts=max_close_ts,
+                event_ticker=event_ticker,
+                series_ticker=series_ticker,
+                tickers=tickers,
+            )
+
+            # Add markets to our collection
+            all_markets.extend(response.markets)
+
+            # Check if we have more pages
+            if not response.cursor or response.cursor == "":
+                break
+
+            cursor = response.cursor
+
+            # Safety check to prevent infinite loops
+            if len(all_markets) > 100000:  # Reasonable upper limit
+                raise RuntimeError("Too many markets returned, possible infinite loop")
+
+        return all_markets
 
     async def close(self):
         """Close the HTTP client."""

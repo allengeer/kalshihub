@@ -49,7 +49,9 @@ make pre-commit-install
 
 ### Kalshi API Service
 
-The Kalshi API service provides a Python interface to interact with the Kalshi prediction market API.
+The Kalshi API service provides a Python interface to interact with the Kalshi prediction market API with built-in rate limiting and aggregator functions.
+
+#### Basic Usage
 
 ```python
 import asyncio
@@ -74,6 +76,49 @@ async def main():
             print(f"Status: {market.status}")
             print(f"Last Price: {market.last_price_dollars}")
             print("---")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+#### Rate Limiting
+
+The service automatically enforces a rate limit of 20 calls per second (configurable):
+
+```python
+# Custom rate limit
+async with KalshiAPIService(rate_limit=10.0) as service:
+    # Service will enforce 10 calls per second
+    pass
+```
+
+#### Aggregator Functions
+
+Get all open markets with automatic pagination:
+
+```python
+async def main():
+    async with KalshiAPIService() as service:
+        # Get all open markets (handles pagination automatically)
+        all_open_markets = await service.getAllOpenMarkets()
+        print(f"Found {len(all_open_markets)} open markets")
+
+        # Get open markets with date filters
+        from datetime import datetime
+        min_close = int(datetime(2024, 12, 1).timestamp())
+        max_close = int(datetime(2024, 12, 31).timestamp())
+
+        december_markets = await service.getAllOpenMarkets(
+            min_close_ts=min_close,
+            max_close_ts=max_close
+        )
+        print(f"Found {len(december_markets)} open markets closing in December")
+
+        # Get open markets for specific event
+        election_markets = await service.getAllOpenMarkets(
+            event_ticker="PRES-2024"
+        )
+        print(f"Found {len(election_markets)} open election markets")
 
 if __name__ == "__main__":
     asyncio.run(main())

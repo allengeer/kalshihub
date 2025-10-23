@@ -67,6 +67,8 @@ exposure and enforces position limits based on market volatility.
 
 ### Quality Requirements
 
+**YOU MUST HAVE ALL TESTS PASSING (BDD, LINTING and UNIT) BEFORE COMMITTING AND PUSHING. IF YOU SKIP PRE-COMMiT CHECKS BABY SEALS WILL BE CLUBBED**
+
 #### Unit Test Coverage
 - **Minimum 80% code coverage** for all new features
 - All critical business logic must have comprehensive test coverage
@@ -125,5 +127,3 @@ exposure and enforces position limits based on market volatility.
 - Add/update API documentation
 - Include code examples and usage patterns
 - Update CHANGELOG.md for user-facing changes
-
-

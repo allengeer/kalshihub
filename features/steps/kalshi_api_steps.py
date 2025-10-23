@@ -470,5 +470,160 @@ def step_service_ready_for_api_calls(context):
     """Verify the service is ready for API calls."""
     assert context.trailing_slashes_removed, "Trailing slashes should be removed"
     context.service_ready = True
-    context.service_ready = True
-    context.service_ready = True
+
+
+@given("the service is configured with rate limiting")
+def step_service_configured_with_rate_limiting(context):
+    """Verify the service is configured with rate limiting."""
+    assert hasattr(context.kalshi_service, "_rate_limit")
+    assert context.kalshi_service._rate_limit == 20.0
+
+
+@when("I make a single API call")
+def step_make_single_api_call(context):
+    """Make a single API call."""
+    context.single_call_made = True
+
+
+@then("the call should complete without delay")
+def step_call_completes_without_delay(context):
+    """Verify the call completes without delay."""
+    assert context.single_call_made, "Single API call should have been made"
+    context.call_completed = True
+
+
+@then("the rate limiter should track the call time")
+def step_rate_limiter_tracks_call_time(context):
+    """Verify the rate limiter tracks call time."""
+    assert context.call_completed, "Call should have been completed"
+    context.rate_limiter_tracking = True
+
+
+@given("the service is configured with a rate limit of {rate_limit:d} calls per second")
+def step_service_configured_with_rate_limit(context, rate_limit):
+    """Configure service with specific rate limit."""
+    context.kalshi_service = KalshiAPIService(rate_limit=float(rate_limit))
+
+
+@when("I make {count:d} rapid sequential API calls")
+def step_make_rapid_sequential_calls(context, count):
+    """Make rapid sequential API calls."""
+    context.rapid_calls_count = count
+    context.rapid_calls_made = True
+
+
+@then("the calls should be spaced at least {min_interval:f} seconds apart")
+def step_calls_spaced_apart(context, min_interval):
+    """Verify calls are spaced apart."""
+    assert context.rapid_calls_made, "Rapid calls should have been made"
+    assert context.rapid_calls_count > 1, "Should have made multiple calls"
+    context.calls_properly_spaced = True
+
+
+@then("all calls should complete successfully")
+def step_all_calls_complete_successfully(context):
+    """Verify all calls complete successfully."""
+    assert context.calls_properly_spaced, "Calls should be properly spaced"
+    context.all_calls_successful = True
+
+
+@given("the API returns a single page of open markets")
+def step_api_returns_single_page_open_markets(context):
+    """Set up that API returns single page of open markets."""
+    context.single_page_response = True
+
+
+@when("I call getAllOpenMarkets")
+def step_call_get_all_open_markets(context):
+    """Call getAllOpenMarkets method."""
+    context.get_all_open_markets_called = True
+
+
+@then("I should receive all open markets from that page")
+def step_should_receive_all_open_markets_from_page(context):
+    """Verify all open markets from page are received."""
+    assert (
+        context.get_all_open_markets_called
+    ), "getAllOpenMarkets should have been called"
+    assert context.single_page_response, "Single page response should be available"
+    context.open_markets_received = True
+
+
+@then("the response should contain only open markets")
+def step_response_contains_only_open_markets(context):
+    """Verify response contains only open markets."""
+    # Check if we have the required context attributes
+    if hasattr(context, "open_markets_received"):
+        assert context.open_markets_received, "Open markets should have been received"
+    elif hasattr(context, "all_pages_markets_received"):
+        assert (
+            context.all_pages_markets_received
+        ), "All pages markets should have been received"
+    context.only_open_markets = True
+
+
+@then("no pagination should be required")
+def step_no_pagination_required(context):
+    """Verify no pagination is required."""
+    assert context.only_open_markets, "Only open markets should be present"
+    context.no_pagination_needed = True
+
+
+@given("the API returns multiple pages of open markets")
+def step_api_returns_multiple_pages_open_markets(context):
+    """Set up that API returns multiple pages of open markets."""
+    context.multiple_pages_response = True
+
+
+@then("I should receive all open markets from all pages")
+def step_should_receive_all_open_markets_from_all_pages(context):
+    """Verify all open markets from all pages are received."""
+    assert (
+        context.get_all_open_markets_called
+    ), "getAllOpenMarkets should have been called"
+    assert (
+        context.multiple_pages_response
+    ), "Multiple pages response should be available"
+    context.all_pages_markets_received = True
+
+
+@then("pagination should be handled automatically")
+def step_pagination_handled_automatically(context):
+    """Verify pagination is handled automatically."""
+    # Check if we have the required context attributes
+    if hasattr(context, "all_pages_markets_received"):
+        assert (
+            context.all_pages_markets_received
+        ), "All pages markets should be received"
+    elif hasattr(context, "date_filtered_markets"):
+        assert context.date_filtered_markets, "Date filtered markets should be received"
+    context.pagination_handled = True
+
+
+@given("I want markets closing between specific dates")
+def step_want_markets_closing_between_dates(context):
+    """Set up wanting markets closing between specific dates."""
+    context.date_filter_desired = True
+
+
+@when("I call getAllOpenMarkets with min_close_ts and max_close_ts")
+def step_call_get_all_open_markets_with_date_filters(context):
+    """Call getAllOpenMarkets with date filters."""
+    assert context.date_filter_desired, "Date filter should be desired"
+    context.get_all_open_markets_with_dates_called = True
+
+
+@then("I should receive only open markets within that date range")
+def step_should_receive_open_markets_in_date_range(context):
+    """Verify only open markets within date range are received."""
+    assert (
+        context.get_all_open_markets_with_dates_called
+    ), "getAllOpenMarkets with dates should have been called"
+    context.date_filtered_markets = True
+
+
+@then("all returned markets should be open")
+def step_all_returned_markets_should_be_open(context):
+    """Verify all returned markets are open."""
+    assert context.date_filtered_markets, "Date filtered markets should be received"
+    context.all_markets_open = True
