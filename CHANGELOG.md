@@ -13,7 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Basic project structure
 - README.md with installation and usage instructions
 - CHANGELOG.md for version tracking
-- AGENTS.md for AI agent documentation
+- AGENTS.md with comprehensive development workflow and quality standards
+- Development workflow requirements:
+  - PR structure (WHAT, WHY, HOW format)
+  - Commit message guidelines with GitHub issue linking
+  - GitHub issue workflow for feature development
+  - 80% unit test coverage requirement
+  - Gherkin scenarios requirement for all features
+  - Component testing for live service integrations
+- Enhanced Makefile with coverage reporting commands
+- Code quality standards and testing strategy
 
 ### Changed
 - Nothing yet

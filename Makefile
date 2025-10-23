@@ -7,8 +7,8 @@ help: ## Show this help message
 install: ## Install dependencies
 	pip install -r requirements.txt
 
-test: ## Run tests
-	python -m pytest tests/ -v
+test: ## Run tests with coverage
+	python -m pytest tests/ -v --cov=src --cov-report=html --cov-report=term-missing
 
 lint: ## Run linting
 	flake8 src/ tests/
@@ -34,3 +34,10 @@ setup: ## Initial setup (install dependencies and create directories)
 activate: ## Show activation command for virtual environment
 	@echo "To activate the virtual environment, run:"
 	@echo "source venv/bin/activate"
+
+coverage: ## Generate and open coverage report
+	python -m pytest tests/ --cov=src --cov-report=html
+	open htmlcov/index.html || xdg-open htmlcov/index.html || echo "Open htmlcov/index.html in your browser"
+
+check-coverage: ## Check if coverage meets 80% requirement
+	python -m pytest tests/ --cov=src --cov-report=term-missing --cov-fail-under=80

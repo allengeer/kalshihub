@@ -1,6 +1,7 @@
 """Tests for the main application module."""
 
 import asyncio
+
 import pytest
 
 from src.main import main
