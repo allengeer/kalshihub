@@ -46,6 +46,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Created extensive test suite with 80%+ coverage
   - Added Gherkin scenarios for BDD testing of API service
   - Updated documentation with usage examples and API reference
+- Rate limiting and aggregator functions:
+  - Added automatic rate limiting (20 calls/second, configurable)
+  - Implemented getAllOpenMarkets aggregator function with automatic pagination
+  - Added support for filtering open markets by date range, event, series, and tickers
+  - Enhanced service with comprehensive error handling and safety limits
+  - Added extensive test coverage for rate limiting and aggregator functionality
+  - Updated documentation with rate limiting and aggregator usage examples
 
 ### Changed
 - Nothing yet
