@@ -57,10 +57,10 @@ class Market:
     risk_limit_cents: int
     rules_primary: str
     rules_secondary: str
-    settlement_value: int
-    settlement_value_dollars: str
-    price_level_structure: str
-    price_ranges: List[Dict[str, str]]
+    settlement_value: Optional[int] = None
+    settlement_value_dollars: Optional[str] = None
+    price_level_structure: Optional[str] = None
+    price_ranges: Optional[List[Dict[str, str]]] = None
 
 
 @dataclass
@@ -120,6 +120,11 @@ class KalshiAPIService:
 
     def _parse_market(self, market_data: Dict[str, Any]) -> Market:
         """Parse market data from API response into Market object."""
+
+        def get_field(key: str, default: Any = None):
+            """Get field from market_data with default value."""
+            return market_data.get(key, default)
+
         return Market(
             ticker=market_data["ticker"],
             event_ticker=market_data["event_ticker"],
@@ -174,10 +179,10 @@ class KalshiAPIService:
             risk_limit_cents=market_data["risk_limit_cents"],
             rules_primary=market_data["rules_primary"],
             rules_secondary=market_data["rules_secondary"],
-            settlement_value=market_data["settlement_value"],
-            settlement_value_dollars=market_data["settlement_value_dollars"],
-            price_level_structure=market_data["price_level_structure"],
-            price_ranges=market_data["price_ranges"],
+            settlement_value=get_field("settlement_value"),
+            settlement_value_dollars=get_field("settlement_value_dollars"),
+            price_level_structure=get_field("price_level_structure"),
+            price_ranges=get_field("price_ranges"),
         )
 
     async def get_markets(
