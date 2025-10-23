@@ -7,10 +7,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-from kalshi.service import KalshiAPIService
-
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from kalshi.service import KalshiAPIService  # noqa: E402
 
 
 async def test_service_initialization():

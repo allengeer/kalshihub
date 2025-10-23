@@ -8,10 +8,10 @@ import asyncio
 import sys
 from pathlib import Path
 
-from kalshi.service import KalshiAPIService
-
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from kalshi.service import KalshiAPIService  # noqa: E402
 
 
 async def main():
@@ -60,8 +60,8 @@ async def main():
             # Get markets closing in the next 30 days
             from datetime import datetime, timedelta
 
-            min_close = int((datetime.now() + timedelta(days=1)).timestamp())
-            max_close = int((datetime.now() + timedelta(days=30)).timestamp())
+            min_close = int(datetime.timestamp(datetime.now() + timedelta(days=1)))
+            max_close = int(datetime.timestamp(datetime.now() + timedelta(days=30)))
 
             filtered_markets = await service.getAllOpenMarkets(
                 min_close_ts=min_close, max_close_ts=max_close

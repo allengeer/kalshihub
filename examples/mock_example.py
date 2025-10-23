@@ -10,10 +10,10 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
-from kalshi.service import KalshiAPIService, MarketsResponse
-
 # Add the src directory to the Python path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from kalshi.service import KalshiAPIService, MarketsResponse  # noqa: E402
 
 
 def create_mock_market(ticker: str, title: str, status: str = "open") -> dict:
