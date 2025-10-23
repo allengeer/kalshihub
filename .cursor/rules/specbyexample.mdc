@@ -1,0 +1,10 @@
+---
+description: Define features with Example Gherkin Specifications first
+alwaysApply: false
+---
+
+- When a new feature is requested, we must first illustrate the feature with a set of examples defined in Gherkin that serve as executable specifications of the feature.
+- These gherkin examples are to be implemented first 
+- Examples should include common scenarios as well as examples that illustrate complexity or risk.
+- Use best practice gherkin such as using tables for various values. 
+- Use behave python module 
