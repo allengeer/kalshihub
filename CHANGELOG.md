@@ -23,6 +23,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Component testing for live service integrations
 - Enhanced Makefile with coverage reporting commands
 - Code quality standards and testing strategy
+- GitHub Actions CI workflow for automated PR validation:
+  - Automated test execution with pytest
+  - Code coverage enforcement (80% minimum)
+  - Linting with flake8 and mypy
+  - Code formatting checks with black
+  - Coverage reporting and artifact upload
+  - Dependency caching for faster builds
+- Comprehensive test suite for CI workflow functionality
+- Gherkin scenarios for CI workflow feature validation
 
 ### Changed
 - Nothing yet

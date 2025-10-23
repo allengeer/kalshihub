@@ -39,6 +39,11 @@ venv\Scripts\activate     # On Windows
 pip install -r requirements.txt
 ```
 
+4. Set up pre-commit hooks (recommended):
+```bash
+make pre-commit-install
+```
+
 ## Usage
 
 ```bash
@@ -79,6 +84,10 @@ kalshihub/
 ### Running Tests
 
 ```bash
+# Run all CI checks locally
+make ci-local
+
+# Or run tests individually
 python -m pytest tests/
 ```
 
