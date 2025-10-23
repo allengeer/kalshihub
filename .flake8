@@ -5,4 +5,5 @@ per-file-ignores =
     examples/*:E402,E501
     scripts/*:E402
     setup_firebase.py:E402,F841
-    features/*:E501
+    features/*:E501,F401
+    setup.py:E501
