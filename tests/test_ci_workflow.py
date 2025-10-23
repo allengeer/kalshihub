@@ -44,10 +44,11 @@ class TestCIWorkflow:
         with open(workflow_path, "r") as file:
             workflow_config = yaml.safe_load(file)
 
-        # Check required top-level keys
-        required_keys = ["name", "on", "jobs"]
-        for key in required_keys:
-            assert key in workflow_config, f"Workflow should have '{key}' key"
+        # Check required top-level keys (handle PyYAML's interpretation of 'on' as boolean)
+        assert "name" in workflow_config, "Workflow should have 'name' key"
+        assert "jobs" in workflow_config, "Workflow should have 'jobs' key"
+        # Check for 'on' key - it might be parsed as boolean True by PyYAML
+        assert True in workflow_config or "on" in workflow_config, "Workflow should have 'on' key"
 
     def test_ci_workflow_triggers(self):
         """Test that CI workflow has correct triggers."""
@@ -59,7 +60,8 @@ class TestCIWorkflow:
         with open(workflow_path, "r") as file:
             workflow_config = yaml.safe_load(file)
 
-        triggers = workflow_config.get("on", {})
+        # Handle PyYAML's interpretation of 'on' as boolean True
+        triggers = workflow_config.get(True, {}) or workflow_config.get("on", {})
 
         # Check push triggers
         assert "push" in triggers, "Workflow should trigger on push"
