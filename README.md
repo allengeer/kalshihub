@@ -8,6 +8,7 @@ This project provides tools and utilities for automated trading on Kalshi, inclu
 
 ## Features
 
+- [x] Kalshi API service with get_markets method
 - [ ] Market data integration
 - [ ] Trading algorithms
 - [ ] Risk management
@@ -45,6 +46,40 @@ make pre-commit-install
 ```
 
 ## Usage
+
+### Kalshi API Service
+
+The Kalshi API service provides a Python interface to interact with the Kalshi prediction market API.
+
+```python
+import asyncio
+from src.kalshi.service import KalshiAPIService
+
+async def main():
+    async with KalshiAPIService() as service:
+        # Get all markets
+        response = await service.get_markets()
+        print(f"Found {len(response.markets)} markets")
+
+        # Get markets with filters
+        filtered_response = await service.get_markets(
+            limit=50,
+            status="open",
+            event_ticker="PRES-2024"
+        )
+
+        for market in filtered_response.markets:
+            print(f"Market: {market.title}")
+            print(f"Ticker: {market.ticker}")
+            print(f"Status: {market.status}")
+            print(f"Last Price: {market.last_price_dollars}")
+            print("---")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Running the Application
 
 ```bash
 # Activate virtual environment first
