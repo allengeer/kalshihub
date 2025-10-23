@@ -182,14 +182,13 @@ class TestCIWorkflow:
         assert "When" in content, "Should contain When steps"
         assert "Then" in content, "Should contain Then steps"
 
-    def test_ci_workflow_artifact_upload(self):
-        """Test that CI workflow uploads coverage artifacts."""
+    def test_ci_workflow_codecov_upload(self):
+        """Test that CI workflow uploads coverage to Codecov."""
         workflow_path = Path(".github/workflows/ci.yml")
 
         with open(workflow_path, "r") as file:
             workflow_content = file.read()
 
-        assert "upload-artifact" in workflow_content, "Should upload coverage artifacts"
         assert (
-            "coverage-report" in workflow_content
-        ), "Should upload coverage report artifact"
+            "codecov/codecov-action" in workflow_content
+        ), "Should upload coverage to Codecov"
