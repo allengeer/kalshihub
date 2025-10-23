@@ -1,7 +1,8 @@
 """Tests for Firebase schema management."""
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from src.firebase.schema import FirebaseSchemaManager
 
@@ -139,4 +140,5 @@ class TestFirebaseSchemaManager:
 
             mock_delete_app.assert_called_once_with(schema_manager._app)
             assert schema_manager._app is None
+            assert schema_manager._db is None
             assert schema_manager._db is None

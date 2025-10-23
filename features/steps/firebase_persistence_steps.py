@@ -2,12 +2,17 @@
 
 import os
 from datetime import datetime
-
-from behave import given, then, when
 from unittest.mock import MagicMock, patch
 
-from src.firebase import FirebaseSchemaManager, MarketDAO, MarketCrawler
-from src.kalshi.service import Market
+from behave import given, then, when
+
+# Import with fallback for different execution contexts
+try:
+    from src.firebase import FirebaseSchemaManager, MarketCrawler, MarketDAO
+    from src.kalshi.service import Market
+except ImportError:
+    from firebase import FirebaseSchemaManager, MarketCrawler, MarketDAO
+    from kalshi.service import Market
 
 
 @given('Firebase is configured with project ID "{project_id}"')

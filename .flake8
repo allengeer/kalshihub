@@ -1,0 +1,8 @@
+[flake8]
+max-line-length = 88
+per-file-ignores =
+    tests/*:E501
+    examples/*:E402,E501
+    scripts/*:E402
+    setup_firebase.py:E402,F841
+    features/*:E501

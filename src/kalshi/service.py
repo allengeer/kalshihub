@@ -118,6 +118,31 @@ class KalshiAPIService:
 
         self._last_call_time = asyncio.get_event_loop().time()
 
+    def _parse_datetime(self, datetime_str: str) -> datetime:
+        """Parse datetime string with flexible microsecond handling.
+
+        Args:
+            datetime_str: ISO format datetime string
+
+        Returns:
+            Parsed datetime object
+        """
+        # Replace Z with +00:00 for timezone handling
+        if datetime_str.endswith("Z"):
+            datetime_str = datetime_str.replace("Z", "+00:00")
+
+        # Handle microseconds with different precision
+        if "." in datetime_str and "+" in datetime_str:
+            # Split on timezone indicator
+            dt_part, tz_part = datetime_str.rsplit("+", 1)
+            if "." in dt_part:
+                # Normalize microseconds to 6 digits
+                base_dt, microsec = dt_part.split(".")
+                microsec = microsec.ljust(6, "0")[:6]  # Pad or truncate to 6 digits
+                datetime_str = f"{base_dt}.{microsec}+{tz_part}"
+
+        return datetime.fromisoformat(datetime_str)
+
     def _parse_market(self, market_data: Dict[str, Any]) -> Market:
         """Parse market data from API response into Market object."""
 
@@ -133,17 +158,11 @@ class KalshiAPIService:
             subtitle=market_data["subtitle"],
             yes_sub_title=market_data["yes_sub_title"],
             no_sub_title=market_data["no_sub_title"],
-            open_time=datetime.fromisoformat(
-                market_data["open_time"].replace("Z", "+00:00")
-            ),
-            close_time=datetime.fromisoformat(
-                market_data["close_time"].replace("Z", "+00:00")
-            ),
-            expiration_time=datetime.fromisoformat(
-                market_data["expiration_time"].replace("Z", "+00:00")
-            ),
-            latest_expiration_time=datetime.fromisoformat(
-                market_data["latest_expiration_time"].replace("Z", "+00:00")
+            open_time=self._parse_datetime(market_data["open_time"]),
+            close_time=self._parse_datetime(market_data["close_time"]),
+            expiration_time=self._parse_datetime(market_data["expiration_time"]),
+            latest_expiration_time=self._parse_datetime(
+                market_data["latest_expiration_time"]
             ),
             settlement_timer_seconds=market_data["settlement_timer_seconds"],
             status=market_data["status"],

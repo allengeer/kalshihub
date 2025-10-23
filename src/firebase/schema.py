@@ -48,7 +48,9 @@ class FirebaseSchemaManager:
         return {
             "collections": {
                 "markets": {
-                    "description": "Market data collection for Kalshi prediction markets",
+                    "description": (
+                        "Market data collection for Kalshi prediction markets"
+                    ),
                     "fields": {
                         "ticker": {
                             "type": "string",
@@ -79,7 +81,9 @@ class FirebaseSchemaManager:
                         },
                         "status": {
                             "type": "string",
-                            "description": "Market status (open, closed, settled, etc.)",
+                            "description": (
+                                "Market status (open, closed, settled, etc.)"
+                            ),
                             "required": True,
                             "indexed": True,
                         },
@@ -238,7 +242,10 @@ class FirebaseSchemaManager:
             schema_doc = schema_ref.get()
 
             if schema_doc.exists:
-                return schema_doc.to_dict().get("version")
+                doc_dict = schema_doc.to_dict()
+                if doc_dict:
+                    return str(doc_dict.get("version", ""))
+                return None
 
             return None
 

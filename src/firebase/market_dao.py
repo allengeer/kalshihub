@@ -2,6 +2,7 @@
 
 import hashlib
 import json
+import sys
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
@@ -9,7 +10,11 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from google.cloud.firestore import Client
 
-from src.kalshi.service import Market
+# Import Market - handle both direct and relative imports
+try:
+    from src.kalshi.service import Market
+except ImportError:
+    from kalshi.service import Market  # type: ignore[no-redef]
 
 
 class MarketDAO:
@@ -262,7 +267,7 @@ class MarketDAO:
             return False
 
     def batch_create_markets(self, markets: List[Market]) -> int:
-        """Create multiple markets in a batch operation.
+        """Create multiple markets using BulkWriter for efficient bulk operations.
 
         Args:
             markets: List of Market objects to create
@@ -275,24 +280,40 @@ class MarketDAO:
 
         try:
             db = self._get_db()
-            batch = db.batch()
+            bulk_writer = db.bulk_writer()
             success_count = 0
 
-            for market in markets:
+            print(f"   Queuing {len(markets)} markets for creation...")
+            sys.stdout.flush()
+
+            for i, market in enumerate(markets):
                 try:
                     market_ref = db.collection("markets").document(market.ticker)
                     market_data = self._market_to_dict(market)
-                    batch.set(market_ref, market_data)
+                    bulk_writer.set(market_ref, market_data)
                     success_count += 1
+
+                    # Print progress every 1000 markets
+                    if (i + 1) % 1000 == 0:
+                        print(f"   Queued {i + 1}/{len(markets)} markets...")
+                        sys.stdout.flush()
+
                 except Exception as e:
-                    print(f"Failed to prepare market {market.ticker} for batch: {e}")
+                    print(f"   Failed to prepare market {market.ticker}: {e}")
+                    sys.stdout.flush()
 
-            if success_count > 0:
-                batch.commit()
+            # Flush all pending operations
+            print(f"   Flushing {success_count} create operations...")
+            sys.stdout.flush()
+            bulk_writer.close()
 
+            print(f"✓ Successfully created {success_count} markets")
+            sys.stdout.flush()
             return success_count
+
         except Exception as e:
             print(f"Batch create failed: {e}")
+            sys.stdout.flush()
             return 0
 
     def batch_update_markets(self, markets: List[Market]) -> int:
@@ -320,7 +341,8 @@ class MarketDAO:
                     success_count += 1
                 except Exception as e:
                     print(
-                        f"Failed to prepare market {market.ticker} for batch update: {e}"
+                        f"Failed to prepare market {market.ticker} for batch "
+                        f"update: {e}"
                     )
 
             if success_count > 0:
@@ -478,6 +500,47 @@ class MarketDAO:
         except Exception as e:
             print(f"Failed to convert dict to market: {e}")
             return None
+
+    async def clear_all_markets(self) -> bool:
+        """Clear all markets from the collection using BulkWriter.
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            db = self._get_db()
+            markets_ref = db.collection("markets")
+
+            # Use BulkWriter for efficient bulk deletes
+            bulk_writer = db.bulk_writer()
+            deleted_count = 0
+
+            print("   Fetching market documents to delete...")
+            sys.stdout.flush()
+
+            # Stream all documents and delete them
+            for doc in markets_ref.stream():
+                bulk_writer.delete(doc.reference)
+                deleted_count += 1
+
+                # Print progress every 1000 documents
+                if deleted_count % 1000 == 0:
+                    print(f"   Queued {deleted_count} documents for deletion...")
+                    sys.stdout.flush()
+
+            # Flush all pending operations
+            print(f"   Flushing {deleted_count} delete operations...")
+            sys.stdout.flush()
+            bulk_writer.close()
+
+            print(f"✅ Cleared {deleted_count} market documents")
+            sys.stdout.flush()
+            return True
+
+        except Exception as e:
+            print(f"❌ Error clearing markets: {e}")
+            sys.stdout.flush()
+            return False
 
     def close(self):
         """Close Firebase connections."""
