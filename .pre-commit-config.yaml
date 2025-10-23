@@ -26,14 +26,21 @@ repos:
     rev: v1.18.2
     hooks:
       - id: mypy
-        additional_dependencies: [types-all]
         args: [--ignore-missing-imports]
+        additional_dependencies: [types-PyYAML]
 
   - repo: local
     hooks:
       - id: pytest
         name: pytest
         entry: pytest tests/ -v --cov=src --cov-fail-under=80
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
+      - id: behave
+        name: behave
+        entry: behave features/ -v
         language: system
         pass_filenames: false
         always_run: true

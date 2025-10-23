@@ -89,7 +89,24 @@ make ci-local
 
 # Or run tests individually
 python -m pytest tests/
+
+# Run BDD tests with Behave
+make bdd
 ```
+
+### BDD Testing
+
+This project uses [Behave](https://behave.readthedocs.io/) for Behavior-Driven Development (BDD) testing with Gherkin scenarios.
+
+```bash
+# Run BDD tests
+make bdd
+
+# Or run directly
+behave features/ -v
+```
+
+BDD tests are located in the `features/` directory and use Gherkin syntax to describe application behavior.
 
 ### Coverage Tracking
 
