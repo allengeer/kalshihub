@@ -9,7 +9,7 @@ from src.main import main
 
 class TestMain:
     """Test cases for the main application."""
-    
+
     @pytest.mark.asyncio
     async def test_main_initialization(self):
         """Test that main function can be called."""

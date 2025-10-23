@@ -15,11 +15,8 @@ load_dotenv()
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('logs/app.log'),
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[logging.FileHandler("logs/app.log"), logging.StreamHandler()],
 )
 
 logger = logging.getLogger(__name__)
@@ -28,15 +25,15 @@ logger = logging.getLogger(__name__)
 async def main():
     """Main application entry point."""
     logger.info("Starting Kalshi Trading Solution...")
-    
+
     try:
         # TODO: Initialize trading system
         logger.info("Application started successfully")
-        
+
         # Keep the application running
         while True:
             await asyncio.sleep(1)
-            
+
     except KeyboardInterrupt:
         logger.info("Application stopped by user")
     except Exception as e:
@@ -47,6 +44,6 @@ async def main():
 if __name__ == "__main__":
     # Ensure logs directory exists
     Path("logs").mkdir(exist_ok=True)
-    
+
     # Run the application
     asyncio.run(main())
