@@ -52,7 +52,7 @@ def step_schema_manager_initialized(context):
 def step_deploy_schema(context):
     """Deploy the Firebase schema."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ):
         context.schema_deployed = context.schema_manager.deploy_schema()
 
@@ -67,7 +67,7 @@ def step_schema_deployed_successfully(context):
 def step_schema_version(context, version):
     """Verify schema version."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ) as mock_client:
         # Mock the schema document
         mock_doc = MagicMock()
@@ -162,7 +162,7 @@ def step_create_market_in_firebase(context):
     )
 
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ):
         context.market_created = context.market_dao.create_market(context.market)
 
@@ -177,7 +177,7 @@ def step_market_created_successfully(context):
 def step_market_retrievable_by_ticker(context, ticker):
     """Verify market can be retrieved by ticker."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ) as mock_client:
         # Mock the market document
         mock_doc = MagicMock()
@@ -252,7 +252,7 @@ def step_update_market_status(context, status):
 def step_save_market_to_firebase(context):
     """Save market to Firebase."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ):
         context.market_updated = context.market_dao.update_market(context.market)
 
@@ -281,7 +281,7 @@ def step_updated_at_timestamp_updated(context):
 def step_retrieve_market_by_ticker(context, ticker):
     """Retrieve market by ticker."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ) as mock_client:
         # Mock the market document
         mock_doc = MagicMock()
@@ -414,7 +414,7 @@ def step_have_markets_with_status(context, status):
 def step_retrieve_markets_by_status(context, status):
     """Retrieve markets by status."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ) as mock_client:
         # Mock the markets query
         mock_docs = []
@@ -482,13 +482,6 @@ def step_should_get_only_status_markets(context, status):
         assert market.status == status
 
 
-@then('all returned markets should have status "{status}"')
-def step_all_markets_have_status(context, status):
-    """Verify all returned markets have the specified status."""
-    for market in context.retrieved_markets:
-        assert market.status == status
-
-
 @given("the market crawler is configured")
 def step_market_crawler_configured(context):
     """Configure the market crawler."""
@@ -518,7 +511,7 @@ def step_kalshi_api_available(context):
 def step_start_market_crawler(context):
     """Start the market crawler."""
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firestore.client"
+        "firebase_admin.firestore.client"
     ):
         context.crawler.start()
 
