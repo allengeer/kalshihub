@@ -1,8 +1,9 @@
 """Tests for CI workflow functionality."""
 
 import os
-import pytest
 from pathlib import Path
+
+import pytest
 
 try:
     import yaml
