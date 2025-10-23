@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Integrated BDD tests into CI workflow and pre-commit hooks
   - Added BDD testing commands to Makefile
   - Updated documentation with BDD testing instructions
+- Kalshi API service implementation:
+  - Added KalshiAPIService class for interacting with Kalshi prediction market API
+  - Implemented get_markets method with full parameter support
+  - Added comprehensive Market and MarketsResponse data classes
+  - Created extensive test suite with 80%+ coverage
+  - Added Gherkin scenarios for BDD testing of API service
+  - Updated documentation with usage examples and API reference
 
 ### Changed
 - Nothing yet

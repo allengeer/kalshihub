@@ -24,6 +24,9 @@ pytest-cov>=4.1.0
 PyYAML>=6.0.0
 behave>=1.2.6
 
+# HTTP Client
+httpx>=0.25.0
+
 # Code quality
 black>=23.0.0
 flake8>=6.0.0
