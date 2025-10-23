@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Linting with flake8 and mypy
   - Code formatting checks with black
   - Coverage reporting and artifact upload
+  - Codecov integration for coverage tracking
   - Dependency caching for faster builds
 - Comprehensive test suite for CI workflow functionality
 - Gherkin scenarios for CI workflow feature validation

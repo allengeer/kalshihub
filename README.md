@@ -91,6 +91,10 @@ make ci-local
 python -m pytest tests/
 ```
 
+### Coverage Tracking
+
+This project uses [Codecov](https://codecov.io) for coverage tracking. Coverage reports are automatically uploaded on every CI run.
+
 ## Contributing
 
 1. Fork the repository
