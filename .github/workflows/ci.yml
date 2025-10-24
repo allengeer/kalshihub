@@ -97,15 +97,13 @@ jobs:
       with:
         project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-    - name: Create app.yaml with secrets
+    - name: Inject secrets into app.yaml
       run: |
-        cat >> app.yaml << 'EOF'
-
-        # Runtime secrets (set via GitHub Secrets)
-        # FIREBASE_PROJECT_ID is set via GCP_PROJECT_ID secret
-        # FIREBASE_CREDENTIALS_PATH uses default application credentials
-        EOF
-        echo "  FIREBASE_PROJECT_ID: \"${{ secrets.GCP_PROJECT_ID }}\"" >> app.yaml
+        # Insert FIREBASE_PROJECT_ID into the env_variables section
+        sed -i '/PYTHONUNBUFFERED: "1"/a\
+        \
+        \ \ # Firebase Configuration (injected from GitHub Secrets)\
+        \ \ FIREBASE_PROJECT_ID: "${{ secrets.GCP_PROJECT_ID }}"' app.yaml
 
     - name: Deploy to App Engine
       run: |
