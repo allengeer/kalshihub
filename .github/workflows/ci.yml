@@ -73,6 +73,7 @@ jobs:
     needs: test
     # Only deploy on push to main branch
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: DEV
 
     steps:
     - uses: actions/checkout@v4
