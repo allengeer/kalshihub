@@ -27,6 +27,8 @@ class MarketDAO:
             project_id: Firebase project ID
             credentials_path: Path to service account credentials JSON file
         """
+        if not project_id:
+            raise ValueError("Firebase project ID is required")
         self.project_id = project_id
         self.credentials_path = credentials_path
         self._db: Optional[Client] = None
