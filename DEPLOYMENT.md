@@ -110,7 +110,7 @@ The application uses automatic scaling configured in [app.yaml](app.yaml):
 automatic_scaling:
   target_cpu_utilization: 0.65
   min_instances: 1
-  max_instances: 10
+  max_instances: 2
 ```
 
 ### Adjust Scaling
