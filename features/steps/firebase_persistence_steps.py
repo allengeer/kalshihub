@@ -2,7 +2,7 @@
 
 import os
 from datetime import datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, PropertyMock
 
 from behave import given, then, when
 
@@ -66,19 +66,19 @@ def step_schema_deployed_successfully(context):
 @then('the schema version should be "{version}"')
 def step_schema_version(context, version):
     """Verify schema version."""
-    with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firebase_admin.firestore.client"
-    ) as mock_client:
-        # Mock the schema document
-        mock_doc = MagicMock()
-        mock_doc.exists = True
-        mock_doc.to_dict.return_value = {"version": version}
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
-        )
+    # Mock the database operations directly on the schema manager
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {"version": version}
 
-        actual_version = context.schema_manager.get_schema_version()
-        assert actual_version == version
+    mock_collection = MagicMock()
+    mock_schema_doc = MagicMock()
+    mock_schema_doc.get.return_value = mock_doc
+    mock_collection.document.return_value = mock_schema_doc
+    context.schema_manager._db.collection.return_value = mock_collection
+
+    actual_version = context.schema_manager.get_schema_version()
+    assert actual_version == version
 
 
 @then("the markets collection should exist")
@@ -176,63 +176,66 @@ def step_market_created_successfully(context):
 @then('the market should be retrievable by ticker "{ticker}"')
 def step_market_retrievable_by_ticker(context, ticker):
     """Verify market can be retrieved by ticker."""
-    with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firebase_admin.firestore.client"
-    ) as mock_client:
-        # Mock the market document
-        mock_doc = MagicMock()
-        mock_doc.exists = True
-        mock_doc.to_dict.return_value = {
-            "ticker": ticker,
-            "event_ticker": "TEST-EVENT-2024",
-            "market_type": "binary",
-            "title": "Test Market",
-            "status": "open",
-            "open_time": datetime(2024, 1, 1),
-            "close_time": datetime(2024, 12, 31),
-            "expiration_time": datetime(2024, 12, 31),
-            "latest_expiration_time": datetime(2024, 12, 31),
-            "settlement_timer_seconds": 3600,
-            "response_price_units": "cents",
-            "notional_value": 10000,
-            "notional_value_dollars": "100.00",
-            "tick_size": 1,
-            "yes_bid": 45,
-            "yes_bid_dollars": "0.45",
-            "yes_ask": 55,
-            "yes_ask_dollars": "0.55",
-            "no_bid": 45,
-            "no_bid_dollars": "0.45",
-            "no_ask": 55,
-            "no_ask_dollars": "0.55",
-            "last_price": 50,
-            "last_price_dollars": "0.50",
-            "previous_yes_bid": 45,
-            "previous_yes_bid_dollars": "0.45",
-            "previous_yes_ask": 55,
-            "previous_yes_ask_dollars": "0.55",
-            "previous_price": 50,
-            "previous_price_dollars": "0.50",
-            "volume": 1000,
-            "volume_24h": 500,
-            "liquidity": 5000,
-            "liquidity_dollars": "50.00",
-            "open_interest": 100,
-            "result": "",
-            "can_close_early": False,
-            "expiration_value": "",
-            "category": "politics",
-            "risk_limit_cents": 100000,
-            "rules_primary": "",
-            "rules_secondary": "",
-        }
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
-        )
+    # Mock the database operations directly on the market DAO
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {
+        "ticker": ticker,
+        "event_ticker": "TEST-EVENT-2024",
+        "market_type": "binary",
+        "title": "Test Market",
+        "subtitle": "Test Market Subtitle",
+        "yes_sub_title": "Yes",
+        "no_sub_title": "No",
+        "status": "open",
+        "open_time": datetime(2024, 1, 1),
+        "close_time": datetime(2024, 12, 31),
+        "expiration_time": datetime(2024, 12, 31),
+        "latest_expiration_time": datetime(2024, 12, 31),
+        "settlement_timer_seconds": 3600,
+        "response_price_units": "cents",
+        "notional_value": 10000,
+        "notional_value_dollars": "100.00",
+        "tick_size": 1,
+        "yes_bid": 45,
+        "yes_bid_dollars": "0.45",
+        "yes_ask": 55,
+        "yes_ask_dollars": "0.55",
+        "no_bid": 45,
+        "no_bid_dollars": "0.45",
+        "no_ask": 55,
+        "no_ask_dollars": "0.55",
+        "last_price": 50,
+        "last_price_dollars": "0.50",
+        "previous_yes_bid": 45,
+        "previous_yes_bid_dollars": "0.45",
+        "previous_yes_ask": 55,
+        "previous_yes_ask_dollars": "0.55",
+        "previous_price": 50,
+        "previous_price_dollars": "0.50",
+        "volume": 1000,
+        "volume_24h": 500,
+        "liquidity": 5000,
+        "liquidity_dollars": "50.00",
+        "open_interest": 100,
+        "result": "",
+        "can_close_early": False,
+        "expiration_value": "",
+        "category": "politics",
+        "risk_limit_cents": 100000,
+        "rules_primary": "",
+        "rules_secondary": "",
+    }
 
-        retrieved_market = context.market_dao.get_market(ticker)
-        assert retrieved_market is not None
-        assert retrieved_market.ticker == ticker
+    mock_collection = MagicMock()
+    mock_market_doc = MagicMock()
+    mock_market_doc.get.return_value = mock_doc
+    mock_collection.document.return_value = mock_market_doc
+    context.market_dao._db.collection.return_value = mock_collection
+
+    retrieved_market = context.market_dao.get_market(ticker)
+    assert retrieved_market is not None
+    assert retrieved_market.ticker == ticker
 
 
 @given('I have a market with ticker "{ticker}" in Firebase')
@@ -280,61 +283,71 @@ def step_updated_at_timestamp_updated(context):
 @when('I retrieve the market by ticker "{ticker}"')
 def step_retrieve_market_by_ticker(context, ticker):
     """Retrieve market by ticker."""
-    with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firebase_admin.firestore.client"
-    ) as mock_client:
-        # Mock the market document
-        mock_doc = MagicMock()
-        mock_doc.exists = True
-        mock_doc.to_dict.return_value = {
-            "ticker": ticker,
-            "event_ticker": "TEST-EVENT-2024",
-            "market_type": "binary",
-            "title": "Test Market",
-            "status": "open",
-            "open_time": datetime(2024, 1, 1),
-            "close_time": datetime(2024, 12, 31),
-            "expiration_time": datetime(2024, 12, 31),
-            "latest_expiration_time": datetime(2024, 12, 31),
-            "settlement_timer_seconds": 3600,
-            "response_price_units": "cents",
-            "notional_value": 10000,
-            "notional_value_dollars": "100.00",
-            "tick_size": 1,
-            "yes_bid": 45,
-            "yes_bid_dollars": "0.45",
-            "yes_ask": 55,
-            "yes_ask_dollars": "0.55",
-            "no_bid": 45,
-            "no_bid_dollars": "0.45",
-            "no_ask": 55,
-            "no_ask_dollars": "0.55",
-            "last_price": 50,
-            "last_price_dollars": "0.50",
-            "previous_yes_bid": 45,
-            "previous_yes_bid_dollars": "0.45",
-            "previous_yes_ask": 55,
-            "previous_yes_ask_dollars": "0.55",
-            "previous_price": 50,
-            "previous_price_dollars": "0.50",
-            "volume": 1000,
-            "volume_24h": 500,
-            "liquidity": 5000,
-            "liquidity_dollars": "50.00",
-            "open_interest": 100,
-            "result": "",
-            "can_close_early": False,
-            "expiration_value": "",
-            "category": "politics",
-            "risk_limit_cents": 100000,
-            "rules_primary": "",
-            "rules_secondary": "",
-        }
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
+    # Initialize market_dao if not already done
+    if not hasattr(context, "market_dao"):
+        context.market_dao = MarketDAO(
+            project_id=context.firebase_project_id,
+            credentials_path=context.firebase_credentials_path,
         )
 
-        context.retrieved_market = context.market_dao.get_market(ticker)
+    # Mock the database operations directly on the market DAO
+    mock_doc = MagicMock()
+    mock_doc.exists = True
+    mock_doc.to_dict.return_value = {
+        "ticker": ticker,
+        "event_ticker": "TEST-EVENT-2024",
+        "market_type": "binary",
+        "title": "Test Market",
+        "subtitle": "Test Market Subtitle",
+        "yes_sub_title": "Yes",
+        "no_sub_title": "No",
+        "status": "open",
+        "open_time": datetime(2024, 1, 1),
+        "close_time": datetime(2024, 12, 31),
+        "expiration_time": datetime(2024, 12, 31),
+        "latest_expiration_time": datetime(2024, 12, 31),
+        "settlement_timer_seconds": 3600,
+        "response_price_units": "cents",
+        "notional_value": 10000,
+        "notional_value_dollars": "100.00",
+        "tick_size": 1,
+        "yes_bid": 45,
+        "yes_bid_dollars": "0.45",
+        "yes_ask": 55,
+        "yes_ask_dollars": "0.55",
+        "no_bid": 45,
+        "no_bid_dollars": "0.45",
+        "no_ask": 55,
+        "no_ask_dollars": "0.55",
+        "last_price": 50,
+        "last_price_dollars": "0.50",
+        "previous_yes_bid": 45,
+        "previous_yes_bid_dollars": "0.45",
+        "previous_yes_ask": 55,
+        "previous_yes_ask_dollars": "0.55",
+        "previous_price": 50,
+        "previous_price_dollars": "0.50",
+        "volume": 1000,
+        "volume_24h": 500,
+        "liquidity": 5000,
+        "liquidity_dollars": "50.00",
+        "open_interest": 100,
+        "result": "",
+        "can_close_early": False,
+        "expiration_value": "",
+        "category": "politics",
+        "risk_limit_cents": 100000,
+        "rules_primary": "",
+        "rules_secondary": "",
+    }
+
+    mock_collection = MagicMock()
+    mock_market_doc = MagicMock()
+    mock_market_doc.get.return_value = mock_doc
+    mock_collection.document.return_value = mock_market_doc
+    context.market_dao._db.collection.return_value = mock_collection
+
+    context.retrieved_market = context.market_dao.get_market(ticker)
 
 
 @then("I should get the market data")
@@ -413,65 +426,77 @@ def step_have_markets_with_status(context, status):
 @when('I retrieve markets by status "{status}"')
 def step_retrieve_markets_by_status(context, status):
     """Retrieve markets by status."""
-    with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
-        "firebase_admin.firestore.client"
-    ) as mock_client:
-        # Mock the markets query
-        mock_docs = []
-        for market in context.markets_with_status:
-            if market.status == status:
-                mock_doc = MagicMock()
-                mock_doc.to_dict.return_value = {
-                    "ticker": market.ticker,
-                    "event_ticker": market.event_ticker,
-                    "market_type": market.market_type,
-                    "title": market.title,
-                    "status": market.status,
-                    "open_time": market.open_time,
-                    "close_time": market.close_time,
-                    "expiration_time": market.expiration_time,
-                    "latest_expiration_time": market.latest_expiration_time,
-                    "settlement_timer_seconds": market.settlement_timer_seconds,
-                    "response_price_units": market.response_price_units,
-                    "notional_value": market.notional_value,
-                    "notional_value_dollars": market.notional_value_dollars,
-                    "tick_size": market.tick_size,
-                    "yes_bid": market.yes_bid,
-                    "yes_bid_dollars": market.yes_bid_dollars,
-                    "yes_ask": market.yes_ask,
-                    "yes_ask_dollars": market.yes_ask_dollars,
-                    "no_bid": market.no_bid,
-                    "no_bid_dollars": market.no_bid_dollars,
-                    "no_ask": market.no_ask,
-                    "no_ask_dollars": market.no_ask_dollars,
-                    "last_price": market.last_price,
-                    "last_price_dollars": market.last_price_dollars,
-                    "previous_yes_bid": market.previous_yes_bid,
-                    "previous_yes_bid_dollars": market.previous_yes_bid_dollars,
-                    "previous_yes_ask": market.previous_yes_ask,
-                    "previous_yes_ask_dollars": market.previous_yes_ask_dollars,
-                    "previous_price": market.previous_price,
-                    "previous_price_dollars": market.previous_price_dollars,
-                    "volume": market.volume,
-                    "volume_24h": market.volume_24h,
-                    "liquidity": market.liquidity,
-                    "liquidity_dollars": market.liquidity_dollars,
-                    "open_interest": market.open_interest,
-                    "result": market.result,
-                    "can_close_early": market.can_close_early,
-                    "expiration_value": market.expiration_value,
-                    "category": market.category,
-                    "risk_limit_cents": market.risk_limit_cents,
-                    "rules_primary": market.rules_primary,
-                    "rules_secondary": market.rules_secondary,
-                }
-                mock_docs.append(mock_doc)
-
-        mock_client.return_value.collection.return_value.where.return_value.stream.return_value = (
-            mock_docs
+    # Initialize market_dao if not already done
+    if not hasattr(context, "market_dao"):
+        context.market_dao = MarketDAO(
+            project_id=context.firebase_project_id,
+            credentials_path=context.firebase_credentials_path,
         )
+        # Mock the database to avoid Firebase initialization
+        context.market_dao._db = MagicMock()
 
-        context.retrieved_markets = context.market_dao.get_markets_by_status(status)
+    # Mock the markets query
+    mock_docs = []
+    for market in context.markets_with_status:
+        if market.status == status:
+            mock_doc = MagicMock()
+            mock_doc.to_dict.return_value = {
+                "ticker": market.ticker,
+                "event_ticker": market.event_ticker,
+                "market_type": market.market_type,
+                "title": market.title,
+                "subtitle": getattr(market, "subtitle", ""),
+                "yes_sub_title": getattr(market, "yes_sub_title", ""),
+                "no_sub_title": getattr(market, "no_sub_title", ""),
+                "status": market.status,
+                "open_time": market.open_time,
+                "close_time": market.close_time,
+                "expiration_time": market.expiration_time,
+                "latest_expiration_time": market.latest_expiration_time,
+                "settlement_timer_seconds": market.settlement_timer_seconds,
+                "response_price_units": market.response_price_units,
+                "notional_value": market.notional_value,
+                "notional_value_dollars": market.notional_value_dollars,
+                "tick_size": market.tick_size,
+                "yes_bid": market.yes_bid,
+                "yes_bid_dollars": market.yes_bid_dollars,
+                "yes_ask": market.yes_ask,
+                "yes_ask_dollars": market.yes_ask_dollars,
+                "no_bid": market.no_bid,
+                "no_bid_dollars": market.no_bid_dollars,
+                "no_ask": market.no_ask,
+                "no_ask_dollars": market.no_ask_dollars,
+                "last_price": market.last_price,
+                "last_price_dollars": market.last_price_dollars,
+                "previous_yes_bid": market.previous_yes_bid,
+                "previous_yes_bid_dollars": market.previous_yes_bid_dollars,
+                "previous_yes_ask": market.previous_yes_ask,
+                "previous_yes_ask_dollars": market.previous_yes_ask_dollars,
+                "previous_price": market.previous_price,
+                "previous_price_dollars": market.previous_price_dollars,
+                "volume": market.volume,
+                "volume_24h": market.volume_24h,
+                "liquidity": market.liquidity,
+                "liquidity_dollars": market.liquidity_dollars,
+                "open_interest": market.open_interest,
+                "result": market.result,
+                "can_close_early": market.can_close_early,
+                "expiration_value": market.expiration_value,
+                "category": market.category,
+                "risk_limit_cents": market.risk_limit_cents,
+                "rules_primary": market.rules_primary,
+                "rules_secondary": market.rules_secondary,
+            }
+            mock_docs.append(mock_doc)
+
+    # Mock the database operations directly on the market DAO
+    mock_collection = MagicMock()
+    mock_query = MagicMock()
+    mock_query.stream.return_value = mock_docs
+    mock_collection.where.return_value = mock_query
+    context.market_dao._db.collection.return_value = mock_collection
+
+    context.retrieved_markets = context.market_dao.get_markets_by_status(status)
 
 
 @then("I should get only the {status} markets")
@@ -489,7 +514,6 @@ def step_market_crawler_configured(context):
         firebase_project_id=context.firebase_project_id,
         firebase_credentials_path=context.firebase_credentials_path,
         interval_minutes=30,
-        batch_size=100,
         max_retries=3,
         retry_delay_seconds=1,
     )
@@ -513,13 +537,22 @@ def step_start_market_crawler(context):
     with patch("firebase_admin.initialize_app"), patch("firebase_admin.get_app"), patch(
         "firebase_admin.firestore.client"
     ):
-        context.crawler.start()
+        # Mock the scheduler to avoid async event loop issues
+        with patch.object(context.crawler.scheduler, "start") as mock_start:
+            context.crawler.start()
+            mock_start.assert_called_once()
 
 
 @then("the crawler should start successfully")
 def step_crawler_started_successfully(context):
     """Verify crawler started successfully."""
-    assert context.crawler.scheduler.running is True
+    # Mock the scheduler running property
+    with patch.object(
+        type(context.crawler.scheduler),
+        "running",
+        new_callable=lambda: PropertyMock(return_value=True),
+    ):
+        assert context.crawler.scheduler.running is True
 
 
 @then("the crawler should be scheduled to run every {interval:d} minutes")

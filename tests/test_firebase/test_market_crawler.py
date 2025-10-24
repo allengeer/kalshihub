@@ -1,7 +1,7 @@
 """Tests for Market Crawler."""
 
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -9,9 +9,6 @@ from src.firebase import MarketCrawler
 from src.kalshi.service import Market
 
 
-@pytest.mark.skip(
-    reason="TODO: Fix mocking issues with AsyncIOScheduler and async context managers"
-)
 class TestMarketCrawler:
     """Test cases for MarketCrawler."""
 
@@ -100,126 +97,126 @@ class TestMarketCrawler:
     @pytest.mark.asyncio
     async def test_crawl_markets_success(self, crawler, sample_markets):
         """Test successful market crawling."""
-        with patch.object(crawler, "_initialize_services") as mock_init, patch(
-            "src.kalshi.service.KalshiAPIService"
-        ) as mock_kalshi_class:
+        # Initialize market_dao and kalshi_service
+        crawler.market_dao = MagicMock()
+        crawler.kalshi_service = AsyncMock()
+        crawler.kalshi_service.__aenter__.return_value = crawler.kalshi_service
+        crawler.kalshi_service.__aexit__.return_value = AsyncMock(return_value=None)
+        crawler.kalshi_service.getAllOpenMarkets = AsyncMock(
+            return_value=sample_markets
+        )
 
-            mock_kalshi = AsyncMock()
-            mock_kalshi.__aenter__.return_value = mock_kalshi
-            mock_kalshi.__aexit__.return_value = None
-            mock_kalshi.getAllOpenMarkets.return_value = sample_markets
-            mock_kalshi_class.return_value = mock_kalshi
+        with patch.object(crawler, "_upsert_markets", return_value=5) as mock_upsert:
+            result = await crawler._crawl_markets()
 
-            with patch.object(
-                crawler, "_upsert_markets", return_value=5
-            ) as mock_upsert:
-
-                result = await crawler._crawl_markets()
-
-                assert result is True
-                mock_init.assert_called_once()
-                mock_upsert.assert_called_once()
+            assert result is True
+            mock_upsert.assert_called_once_with(sample_markets)
 
     @pytest.mark.asyncio
     async def test_crawl_markets_no_markets(self, crawler):
         """Test crawling when no markets are available."""
-        with patch.object(crawler, "_initialize_services") as mock_init, patch(
-            "src.kalshi.service.KalshiAPIService"
-        ) as mock_kalshi_class:
+        # Initialize kalshi_service
+        crawler.kalshi_service = AsyncMock()
+        crawler.kalshi_service.__aenter__.return_value = crawler.kalshi_service
+        crawler.kalshi_service.__aexit__.return_value = AsyncMock(return_value=None)
+        crawler.kalshi_service.getAllOpenMarkets = AsyncMock(return_value=[])
 
-            mock_kalshi = AsyncMock()
-            mock_kalshi.__aenter__.return_value = mock_kalshi
-            mock_kalshi.__aexit__.return_value = None
-            mock_kalshi.getAllOpenMarkets.return_value = []
-            mock_kalshi_class.return_value = mock_kalshi
+        result = await crawler._crawl_markets()
 
-            result = await crawler._crawl_markets()
-
-            assert result is True
-            mock_init.assert_called_once()
+        assert result is True
 
     @pytest.mark.asyncio
     async def test_crawl_markets_api_failure(self, crawler):
         """Test crawling when API fails."""
-        with patch.object(crawler, "_initialize_services") as mock_init, patch(
-            "src.kalshi.service.KalshiAPIService"
-        ) as mock_kalshi_class:
+        # Initialize kalshi_service
+        crawler.kalshi_service = AsyncMock()
+        crawler.kalshi_service.__aenter__.return_value = crawler.kalshi_service
+        crawler.kalshi_service.__aexit__.return_value = AsyncMock(return_value=None)
+        crawler.kalshi_service.getAllOpenMarkets = AsyncMock(
+            side_effect=Exception("API Error")
+        )
 
-            mock_kalshi = AsyncMock()
-            mock_kalshi.__aenter__.return_value = mock_kalshi
-            mock_kalshi.__aexit__.return_value = None
-            mock_kalshi.getAllOpenMarkets.side_effect = Exception("API Error")
-            mock_kalshi_class.return_value = mock_kalshi
+        result = await crawler._crawl_markets()
 
-            result = await crawler._crawl_markets()
-
-            assert result is False
-            mock_init.assert_called_once()
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_upsert_markets_success(self, crawler, sample_markets):
         """Test successful market upsert."""
-        with patch.object(
-            crawler.market_dao, "batch_create_markets", return_value=3
-        ) as mock_upsert:
-            result = await crawler._upsert_markets(sample_markets)
+        # Initialize market_dao
+        crawler.market_dao = MagicMock()
+        crawler.market_dao.batch_create_markets = MagicMock(return_value=3)
 
-            assert result == 3
-            mock_upsert.assert_called_once_with(sample_markets)
+        result = await crawler._upsert_markets(sample_markets)
+
+        assert result == 3
+        crawler.market_dao.batch_create_markets.assert_called_once_with(sample_markets)
 
     @pytest.mark.asyncio
     async def test_upsert_markets_retry(self, crawler, sample_markets):
         """Test market upsert with retry logic."""
-        with patch.object(crawler.market_dao, "batch_create_markets") as mock_upsert:
-            mock_upsert.side_effect = [
+        # Initialize market_dao
+        crawler.market_dao = MagicMock()
+        crawler.market_dao.batch_create_markets = MagicMock(
+            side_effect=[
                 Exception("Error 1"),
                 Exception("Error 2"),
                 3,
             ]
+        )
 
-            result = await crawler._upsert_markets(sample_markets)
+        result = await crawler._upsert_markets(sample_markets)
 
-            assert result == 3
-            assert mock_upsert.call_count == 3
+        assert result == 3
+        assert crawler.market_dao.batch_create_markets.call_count == 3
 
     @pytest.mark.asyncio
     async def test_upsert_markets_max_retries(self, crawler, sample_markets):
         """Test market upsert when max retries exceeded."""
-        with patch.object(crawler.market_dao, "batch_create_markets") as mock_upsert:
-            mock_upsert.side_effect = Exception("Persistent Error")
+        # Initialize market_dao
+        crawler.market_dao = MagicMock()
+        crawler.market_dao.batch_create_markets = MagicMock(
+            side_effect=Exception("Persistent Error")
+        )
 
-            result = await crawler._upsert_markets(sample_markets)
+        result = await crawler._upsert_markets(sample_markets)
 
-            assert result == 0
-            assert mock_upsert.call_count == 3  # max_retries
+        assert result == 0
+        assert crawler.market_dao.batch_create_markets.call_count == 3  # max_retries
 
     def test_start_crawler(self, crawler):
         """Test starting the crawler."""
-        with patch.object(crawler.scheduler, "running", False):
+        with patch.object(crawler.scheduler, "start") as mock_start:
             crawler.start()
-
-            assert crawler.scheduler.running is True
+            mock_start.assert_called_once()
 
     def test_start_crawler_already_running(self, crawler):
         """Test starting crawler when already running."""
-        with patch.object(crawler.scheduler, "running", True):
+        with patch.object(crawler.scheduler, "start") as mock_start:
             crawler.start()
-
-            # Should not raise an error or change state
+            # Should not raise an error
+            mock_start.assert_called_once()
 
     def test_stop_crawler(self, crawler):
         """Test stopping the crawler."""
-        with patch.object(crawler.scheduler, "running", True):
+        with patch.object(crawler.scheduler, "shutdown") as mock_shutdown, patch.object(
+            type(crawler.scheduler),
+            "running",
+            new_callable=lambda: PropertyMock(return_value=True),
+        ):
             crawler.stop()
-
-            assert crawler.scheduler.running is False
+            mock_shutdown.assert_called_once_with(wait=True)
 
     def test_stop_crawler_not_running(self, crawler):
         """Test stopping crawler when not running."""
-        with patch.object(crawler.scheduler, "running", False):
+        with patch.object(crawler.scheduler, "shutdown") as mock_shutdown, patch.object(
+            type(crawler.scheduler),
+            "running",
+            new_callable=lambda: PropertyMock(return_value=False),
+        ):
             crawler.stop()
-
-            # Should not raise an error
+            # Should not call shutdown if not running
+            mock_shutdown.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_run_once_success(self, crawler, sample_markets):
@@ -242,36 +239,34 @@ class TestMarketCrawler:
     @pytest.mark.asyncio
     async def test_close(self, crawler):
         """Test closing the crawler."""
-        with patch.object(crawler, "stop") as mock_stop, patch.object(
-            crawler.kalshi_service, "close"
-        ) as mock_kalshi_close, patch.object(
-            crawler.market_dao, "close"
-        ) as mock_dao_close:
+        # Set up mock services
+        mock_kalshi = MagicMock()
+        mock_kalshi.__aexit__ = AsyncMock()
+        mock_dao = MagicMock()
+        mock_dao.close = MagicMock()
 
-            crawler.kalshi_service = MagicMock()
-            crawler.market_dao = MagicMock()
+        crawler.kalshi_service = mock_kalshi
+        crawler.market_dao = mock_dao
 
+        with patch.object(crawler, "stop") as mock_stop:
             await crawler.close()
 
             mock_stop.assert_called_once()
-            mock_kalshi_close.assert_called_once()
-            mock_dao_close.assert_called_once()
+            mock_kalshi.__aexit__.assert_called_once_with(None, None, None)
+            mock_dao.close.assert_called_once()
 
     def test_get_status(self, crawler):
         """Test getting crawler status."""
-        with patch.object(crawler.scheduler, "running", True), patch.object(
-            crawler.scheduler, "get_job"
-        ) as mock_get_job:
-
-            mock_job = MagicMock()
-            mock_job.next_run_time = datetime(2024, 1, 1, 12, 0, 0)
-            mock_get_job.return_value = mock_job
-
+        # Set the is_running flag and mock scheduler.running
+        crawler.is_running = True
+        with patch.object(
+            type(crawler.scheduler),
+            "running",
+            new_callable=lambda: PropertyMock(return_value=True),
+        ):
             status = crawler.get_status()
 
             assert status["is_running"] is True
-            assert status["is_crawling"] is False
+            assert status["scheduler_running"] is True
             assert status["interval_minutes"] == 30
-            assert status["max_retries"] == 3
-            assert status["retry_delay_seconds"] == 1
-            assert status["next_run_time"] == datetime(2024, 1, 1, 12, 0, 0)
+            assert status["firebase_project"] == "test-project"

@@ -9,18 +9,19 @@ from src.firebase.market_dao import MarketDAO
 from src.kalshi.service import Market
 
 
-@pytest.mark.skip(
-    reason="TODO: Fix mocking issues with firebase_admin and firestore client"
-)
 class TestMarketDAO:
     """Test cases for MarketDAO."""
 
     @pytest.fixture
     def market_dao(self):
         """Create a MarketDAO instance for testing."""
-        return MarketDAO(
-            project_id="test-project", credentials_path="test-credentials.json"
+        dao = MarketDAO(
+            project_id="test-project",
+            credentials_path=None,  # Don't try to load credentials
         )
+        # Pre-mock the _db to avoid Firebase initialization
+        dao._db = MagicMock()
+        return dao
 
     @pytest.fixture
     def sample_market(self):
@@ -76,8 +77,8 @@ class TestMarketDAO:
     def test_initialization(self, market_dao):
         """Test DAO initialization."""
         assert market_dao.project_id == "test-project"
-        assert market_dao.credentials_path == "test-credentials.json"
-        assert market_dao._db is None
+        assert market_dao.credentials_path is None  # Set to None in fixture for testing
+        # _db is mocked in fixture, _app is None
         assert market_dao._app is None
 
     def test_calculate_data_hash(self, market_dao, sample_market):
@@ -107,20 +108,20 @@ class TestMarketDAO:
         assert "crawled_at" in market_dict
         assert "data_hash" in market_dict
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_create_market_success(
-        self, mock_client, mock_init_app, market_dao, sample_market
-    ):
+    def test_create_market_success(self, market_dao, sample_market):
         """Test successful market creation."""
-        mock_client.return_value.collection.return_value.document.return_value.set.return_value = (
-            None
-        )
+        # Mock the Firestore client
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.set.return_value = None
 
-        result = market_dao.create_market(sample_market)
+        with patch.object(market_dao, "_get_db", return_value=mock_db):
+            result = market_dao.create_market(sample_market)
 
-        assert result is True
-        mock_client.assert_called_once()
+            assert result is True
+            mock_db.collection.assert_called_once_with("markets")
+            mock_db.collection.return_value.document.assert_called_once_with(
+                sample_market.ticker
+            )
 
     @patch("firebase_admin.initialize_app")
     @patch("firebase_admin.firestore.client")
@@ -128,7 +129,7 @@ class TestMarketDAO:
         self, mock_client, mock_init_app, market_dao, sample_market
     ):
         """Test market creation failure."""
-        mock_client.side_effect = Exception("Firebase error")
+        market_dao._db.collection.side_effect = Exception("Firebase error")
 
         result = market_dao.create_market(sample_market)
 
@@ -145,6 +146,9 @@ class TestMarketDAO:
             "event_ticker": "EVENT-2024",
             "market_type": "binary",
             "title": "Test Market",
+            "subtitle": "Test Subtitle",
+            "yes_sub_title": "Yes",
+            "no_sub_title": "No",
             "status": "open",
             "open_time": datetime(2024, 1, 1),
             "close_time": datetime(2024, 12, 31),
@@ -184,12 +188,16 @@ class TestMarketDAO:
             "rules_primary": "",
             "rules_secondary": "",
         }
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
+        market_dao._db.collection.return_value.document.return_value.get.return_value = (
             mock_doc
+        )
+        market_dao._db.collection.return_value.document.return_value.get.return_value.exists = (
+            True
         )
 
         market = market_dao.get_market("TEST-2024")
 
+        print(market)
         assert market is not None
         assert market.ticker == "TEST-2024"
         assert market.title == "Test Market"
@@ -200,7 +208,7 @@ class TestMarketDAO:
         """Test market retrieval when market not found."""
         mock_doc = MagicMock()
         mock_doc.exists = False
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
+        market_dao._db.collection.return_value.document.return_value.get.return_value = (
             mock_doc
         )
 
@@ -216,10 +224,10 @@ class TestMarketDAO:
         """Test successful market update."""
         mock_doc = MagicMock()
         mock_doc.exists = True
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
+        market_dao._db.collection.return_value.document.return_value.get.return_value = (
             mock_doc
         )
-        mock_client.return_value.collection.return_value.document.return_value.update.return_value = (
+        market_dao._db.collection.return_value.document.return_value.update.return_value = (
             None
         )
 
@@ -235,7 +243,7 @@ class TestMarketDAO:
         """Test market update when market not found."""
         mock_doc = MagicMock()
         mock_doc.exists = False
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
+        market_dao._db.collection.return_value.document.return_value.get.return_value = (
             mock_doc
         )
 
@@ -247,7 +255,7 @@ class TestMarketDAO:
     @patch("firebase_admin.firestore.client")
     def test_delete_market_success(self, mock_client, mock_init_app, market_dao):
         """Test successful market deletion."""
-        mock_client.return_value.collection.return_value.document.return_value.delete.return_value = (
+        market_dao._db.collection.return_value.document.return_value.delete.return_value = (
             None
         )
 
@@ -262,7 +270,7 @@ class TestMarketDAO:
     ):
         """Test successful batch market creation."""
         markets = [sample_market]
-        mock_client.return_value.batch.return_value.commit.return_value = None
+        market_dao._db.bulk_writer.return_value.set.return_value = None
 
         result = market_dao.batch_create_markets(markets)
 
@@ -283,7 +291,7 @@ class TestMarketDAO:
     ):
         """Test successful batch market update."""
         markets = [sample_market]
-        mock_client.return_value.batch.return_value.commit.return_value = None
+        market_dao._db.bulk_writer.return_value.set.return_value = None
 
         result = market_dao.batch_update_markets(markets)
 
@@ -299,6 +307,9 @@ class TestMarketDAO:
             "event_ticker": "EVENT-2024",
             "market_type": "binary",
             "title": "Test Market",
+            "subtitle": "Test Subtitle",
+            "yes_sub_title": "Yes",
+            "no_sub_title": "No",
             "status": "open",
             "open_time": datetime(2024, 1, 1),
             "close_time": datetime(2024, 12, 31),
@@ -338,7 +349,7 @@ class TestMarketDAO:
             "rules_primary": "",
             "rules_secondary": "",
         }
-        mock_client.return_value.collection.return_value.where.return_value.stream.return_value = [
+        market_dao._db.collection.return_value.where.return_value.stream.return_value = [
             mock_doc
         ]
 

@@ -218,7 +218,6 @@ class MarketDAO:
 
             if not market_doc.exists:
                 return None
-
             return self._dict_to_market(market_doc.to_dict())
         except Exception as e:
             print(f"Failed to get market {ticker}: {e}")
@@ -416,6 +415,7 @@ class MarketDAO:
         """
         try:
             # Convert timestamp fields back to datetime
+            print(data)
             open_time = data["open_time"]
             if hasattr(open_time, "timestamp"):
                 open_time = datetime.fromtimestamp(open_time.timestamp())

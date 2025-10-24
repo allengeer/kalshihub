@@ -7,24 +7,25 @@ import pytest
 from src.firebase.schema import FirebaseSchemaManager
 
 
-@pytest.mark.skip(
-    reason="TODO: Fix mocking issues with firebase_admin and firestore client"
-)
 class TestFirebaseSchemaManager:
     """Test cases for FirebaseSchemaManager."""
 
     @pytest.fixture
     def schema_manager(self):
         """Create a FirebaseSchemaManager instance for testing."""
-        return FirebaseSchemaManager(
-            project_id="test-project", credentials_path="test-credentials.json"
+        manager = FirebaseSchemaManager(
+            project_id="test-project",
+            credentials_path=None,  # Don't try to load credentials
         )
+        # Pre-mock the _db to avoid Firebase initialization
+        manager._db = MagicMock()
+        return manager
 
     def test_initialization(self, schema_manager):
         """Test schema manager initialization."""
         assert schema_manager.project_id == "test-project"
-        assert schema_manager.credentials_path == "test-credentials.json"
-        assert schema_manager._db is None
+        assert schema_manager.credentials_path is None
+        # _db and _app are mocked for testing
         assert schema_manager._app is None
 
     def test_get_schema_definition(self, schema_manager):
@@ -41,36 +42,32 @@ class TestFirebaseSchemaManager:
         assert markets_schema["fields"]["ticker"]["required"] is True
         assert markets_schema["fields"]["ticker"]["indexed"] is True
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_deploy_schema_success(self, mock_client, mock_init_app, schema_manager):
+    def test_deploy_schema_success(self, schema_manager):
         """Test successful schema deployment."""
-        mock_client.return_value.collection.return_value.document.return_value.set.return_value = (
-            None
-        )
-        mock_client.return_value.collection.return_value.document.return_value.delete.return_value = (
-            None
-        )
+        # Mock the database operations
+        mock_collection = MagicMock()
+        mock_doc = MagicMock()
+        mock_collection.document.return_value = mock_doc
+        schema_manager._db.collection.return_value = mock_collection
 
         result = schema_manager.deploy_schema()
 
         assert result is True
-        mock_init_app.assert_called_once()
-        mock_client.assert_called_once()
+        # Should be called for both _schema and markets collections
+        assert schema_manager._db.collection.call_count >= 2
+        # Check that set was called (for both schema and init document)
+        assert mock_doc.set.call_count >= 2
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_deploy_schema_failure(self, mock_client, mock_init_app, schema_manager):
+    def test_deploy_schema_failure(self, schema_manager):
         """Test schema deployment failure."""
-        mock_client.side_effect = Exception("Firebase error")
+        # Mock the database to raise an exception
+        schema_manager._db.collection.side_effect = Exception("Firebase error")
 
         result = schema_manager.deploy_schema()
 
         assert result is False
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_validate_schema_success(self, mock_client, mock_init_app, schema_manager):
+    def test_validate_schema_success(self, schema_manager):
         """Test successful schema validation."""
         mock_doc = MagicMock()
         mock_doc.exists = True
@@ -78,9 +75,12 @@ class TestFirebaseSchemaManager:
             "version": "1.0.0",
             "definition": {"test": "schema"},
         }
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
-        )
+
+        mock_collection = MagicMock()
+        mock_schema_doc = MagicMock()
+        mock_schema_doc.get.return_value = mock_doc
+        mock_collection.document.return_value = mock_schema_doc
+        schema_manager._db.collection.return_value = mock_collection
 
         result = schema_manager.validate_schema()
 
@@ -102,34 +102,32 @@ class TestFirebaseSchemaManager:
 
         assert result is False
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_get_schema_version_success(
-        self, mock_client, mock_init_app, schema_manager
-    ):
+    def test_get_schema_version_success(self, schema_manager):
         """Test successful schema version retrieval."""
         mock_doc = MagicMock()
         mock_doc.exists = True
         mock_doc.to_dict.return_value = {"version": "1.0.0"}
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
-        )
+
+        mock_collection = MagicMock()
+        mock_schema_doc = MagicMock()
+        mock_schema_doc.get.return_value = mock_doc
+        mock_collection.document.return_value = mock_schema_doc
+        schema_manager._db.collection.return_value = mock_collection
 
         version = schema_manager.get_schema_version()
 
         assert version == "1.0.0"
 
-    @patch("firebase_admin.initialize_app")
-    @patch("firebase_admin.firestore.client")
-    def test_get_schema_version_not_found(
-        self, mock_client, mock_init_app, schema_manager
-    ):
+    def test_get_schema_version_not_found(self, schema_manager):
         """Test schema version retrieval when schema not found."""
         mock_doc = MagicMock()
         mock_doc.exists = False
-        mock_client.return_value.collection.return_value.document.return_value.get.return_value = (
-            mock_doc
-        )
+
+        mock_collection = MagicMock()
+        mock_schema_doc = MagicMock()
+        mock_schema_doc.get.return_value = mock_doc
+        mock_collection.document.return_value = mock_schema_doc
+        schema_manager._db.collection.return_value = mock_collection
 
         version = schema_manager.get_schema_version()
 

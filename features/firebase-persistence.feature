@@ -1,11 +1,7 @@
-@wip
 Feature: Firebase Market Data Persistence
   As a trading system
   I want to persist market data to Firebase
   So that I can maintain historical data and enable offline analysis
-
-  # Note: These scenarios require actual Firebase credentials and are not run in CI
-  # They serve as documentation and can be run manually with proper Firebase setup
 
   Background:
     Given Firebase is configured with project ID "test-project"
