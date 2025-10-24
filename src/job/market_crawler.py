@@ -120,6 +120,59 @@ class MarketCrawler:
             sys.stdout.flush()
             return False
 
+    async def _crawl_markets_with_filtering(self, max_close_ts: int) -> bool:
+        """Crawl and update market data with close time filtering.
+
+        Args:
+            max_close_ts: Maximum close timestamp for markets to crawl
+
+        Returns:
+            True if crawl was successful, False otherwise
+        """
+        try:
+            await self._initialize_services()
+
+            print(
+                f"[{datetime.now()}] Starting market crawl with filtering "
+                f"(max close time: {datetime.fromtimestamp(max_close_ts)})..."
+            )
+            sys.stdout.flush()
+
+            # Get filtered open markets from Kalshi API
+            if not self.kalshi_service:
+                raise RuntimeError("Kalshi service not initialized")
+            async with self.kalshi_service as kalshi:
+                markets = await kalshi.getAllOpenMarkets(max_close_ts=max_close_ts)
+
+            print(f"[{datetime.now()}] Retrieved {len(markets)} filtered open markets")
+            sys.stdout.flush()
+
+            if not markets:
+                print(f"[{datetime.now()}] No markets to process within time window")
+                sys.stdout.flush()
+                return True
+
+            # Upsert all markets using BulkWriter (creates or updates)
+            print(
+                f"[{datetime.now()}] Upserting {len(markets)} filtered markets "
+                f"using BulkWriter..."
+            )
+            sys.stdout.flush()
+
+            success_count = await self._upsert_markets(markets)
+
+            print(
+                f"[{datetime.now()}] Filtered crawl completed: {success_count}/"
+                f"{len(markets)} markets processed successfully"
+            )
+            sys.stdout.flush()
+            return success_count > 0
+
+        except Exception as e:
+            print(f"[{datetime.now()}] Filtered crawl failed: {e}")
+            sys.stdout.flush()
+            return False
+
     async def _upsert_markets(self, markets: List[Market]) -> int:
         """Upsert markets using BulkWriter with exponential backoff.
 
