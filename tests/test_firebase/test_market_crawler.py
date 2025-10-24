@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
 
-from src.firebase import MarketCrawler
+from src.job import MarketCrawler
 from src.kalshi.service import Market
 
 

@@ -9,9 +9,9 @@ from typing import List, Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-# Import from parent firebase module
+# Import from firebase module
 try:
-    from ..market_dao import MarketDAO
+    from src.firebase.market_dao import MarketDAO
 except ImportError:
     from firebase.market_dao import MarketDAO  # type: ignore[no-redef]
 

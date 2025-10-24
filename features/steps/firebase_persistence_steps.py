@@ -8,10 +8,12 @@ from behave import given, then, when
 
 # Import with fallback for different execution contexts
 try:
-    from src.firebase import FirebaseSchemaManager, MarketCrawler, MarketDAO
+    from src.firebase import FirebaseSchemaManager, MarketDAO
+    from src.job import MarketCrawler
     from src.kalshi.service import Market
 except ImportError:
-    from firebase import FirebaseSchemaManager, MarketCrawler, MarketDAO
+    from firebase import FirebaseSchemaManager, MarketDAO
+    from job import MarketCrawler
     from kalshi.service import Market
 
 
