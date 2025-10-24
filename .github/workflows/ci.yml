@@ -66,3 +66,68 @@ jobs:
         name: codecov-umbrella
         fail_ci_if_error: true
         token: ${{ secrets.CODECOV_TOKEN }}
+
+  deploy:
+    name: Deploy to Google App Engine
+    runs-on: ubuntu-latest
+    needs: test
+    # Only deploy on push to main branch
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: DEV
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python 3.13
+      uses: actions/setup-python@v5
+      with:
+        python-version: 3.13
+
+    - name: Create requirements.txt artifact
+      run: |
+        cp requirements.txt requirements.txt.bak
+
+    - name: Authenticate to Google Cloud
+      uses: google-github-actions/auth@v2
+      with:
+        credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Create app.yaml with secrets
+      run: |
+        cat >> app.yaml << 'EOF'
+
+        # Runtime secrets (set via GitHub Secrets)
+        # FIREBASE_PROJECT_ID is set via GCP_PROJECT_ID secret
+        # FIREBASE_CREDENTIALS_PATH uses default application credentials
+        EOF
+        echo "  FIREBASE_PROJECT_ID: \"${{ secrets.GCP_PROJECT_ID }}\"" >> app.yaml
+
+    - name: Deploy to App Engine
+      run: |
+        gcloud app deploy app.yaml \
+          --quiet \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --version=$(echo $GITHUB_SHA | cut -c1-7) \
+          --promote
+
+    - name: Verify deployment
+      run: |
+        gcloud app versions list \
+          --project=${{ secrets.GCP_PROJECT_ID }} \
+          --service=default \
+          --sort-by=~version.createTime \
+          --limit=1
+
+    - name: Upload deployment artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: deployment-info
+        path: |
+          app.yaml
+          requirements.txt
+        retention-days: 30
