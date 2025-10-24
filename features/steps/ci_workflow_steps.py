@@ -75,7 +75,7 @@ def step_test_results_reported(context):
 @then("all tests should pass")
 def step_all_tests_pass(context):
     """Verify that all tests pass."""
-    if hasattr(context, 'test_results_reported'):
+    if hasattr(context, "test_results_reported"):
         assert context.test_results_reported, "Test results should be reported"
     context.all_tests_passed = True
 
@@ -184,7 +184,7 @@ def step_workflow_succeeds(context):
 @then("an HTML coverage report should be generated")
 def step_html_coverage_report_generated(context):
     """Verify that an HTML coverage report is generated."""
-    if hasattr(context, 'coverage_calculated'):
+    if hasattr(context, "coverage_calculated"):
         assert context.coverage_calculated, "Coverage should be calculated"
     context.html_coverage_report_generated = True
 
@@ -192,7 +192,9 @@ def step_html_coverage_report_generated(context):
 @then("the coverage report should be uploaded as an artifact")
 def step_coverage_report_uploaded_artifact(context):
     """Verify that the coverage report is uploaded as an artifact."""
-    assert context.html_coverage_report_generated, "HTML coverage report should be generated"
+    assert (
+        context.html_coverage_report_generated
+    ), "HTML coverage report should be generated"
     context.coverage_artifact_uploaded = True
 
 

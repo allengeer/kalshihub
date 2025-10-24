@@ -47,3 +47,11 @@ asyncio-mqtt>=0.13.0
 # Utilities
 click>=8.1.0
 rich>=13.0.0
+
+# Firebase
+firebase-admin>=6.2.0
+google-cloud-firestore>=2.11.0
+
+# Scheduling
+APScheduler>=3.10.0
+APScheduler==3.11.0

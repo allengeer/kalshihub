@@ -1,3 +1,6 @@
+### Using The Venv
+When you run commands you should always ensure the virtual environment located at the ./venv is activated.
+
 ### Pull Request (PR) Structure
 
 All pull requests must follow the **WHAT, WHY, HOW** structure:

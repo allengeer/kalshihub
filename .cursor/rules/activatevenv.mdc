@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+- When running commands in terminal ensure the virtual environment is activated
+- The venv is located at ./venv
