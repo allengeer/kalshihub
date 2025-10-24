@@ -1,0 +1,53 @@
+runtime: python313
+entrypoint: python -m src.service_runner
+
+# Instance configuration
+instance_class: F2
+
+# Automatic scaling configuration
+automatic_scaling:
+  target_cpu_utilization: 0.65
+  target_throughput_utilization: 0.65
+  min_instances: 1
+  max_instances: 10
+  min_idle_instances: 1
+  max_idle_instances: automatic
+  min_pending_latency: automatic
+  max_pending_latency: automatic
+
+# Environment variables
+env_variables:
+  # Kalshi API Configuration
+  KALSHI_BASE_URL: "https://api.elections.kalshi.com/trade-api/v2"
+  KALSHI_RATE_LIMIT: "20.0"
+
+  # Market Crawler Configuration
+  CRAWLER_INTERVAL_MINUTES: "5"
+  MARKET_CLOSE_WINDOW_HOURS: "24"
+  CRAWLER_MAX_RETRIES: "3"
+  CRAWLER_RETRY_DELAY_SECONDS: "1"
+
+  # Application Configuration
+  PYTHONUNBUFFERED: "1"
+
+# Handlers for static files (if needed in the future)
+handlers:
+  - url: /.*
+    script: auto
+    secure: always
+
+# Health check configuration
+liveness_check:
+  path: "/health"
+  check_interval_sec: 30
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+
+readiness_check:
+  path: "/ready"
+  check_interval_sec: 5
+  timeout_sec: 4
+  failure_threshold: 2
+  success_threshold: 2
+  app_start_timeout_sec: 300
