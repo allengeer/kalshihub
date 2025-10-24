@@ -44,14 +44,14 @@ Feature: Firebase Market Data Persistence
     And I have markets with status "closed" in Firebase
     When I retrieve markets by status "open"
     Then I should get only the open markets
-    And all returned markets should have status "open"
+    And all returned Firebase markets should have status "open"
 
   Scenario: Retrieve markets by event
     Given I have markets for event "EVENT-2024" in Firebase
     And I have markets for event "EVENT-2025" in Firebase
     When I retrieve markets by event "EVENT-2024"
-    Then I should get only the EVENT-2024 markets
-    And all returned markets should have event_ticker "EVENT-2024"
+    Then I should get only the markets for event EVENT-2024
+    And all returned Firebase markets should have event_ticker "EVENT-2024"
 
   Scenario: Batch create multiple markets
     Given I have 5 markets to create
