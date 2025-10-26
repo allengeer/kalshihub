@@ -12,6 +12,7 @@ ccxt>=4.0.0
 # API and web framework
 fastapi>=0.100.0
 uvicorn>=0.23.0
+gunicorn>=21.0.0
 
 # Database
 sqlalchemy>=2.0.0

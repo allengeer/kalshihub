@@ -1,5 +1,5 @@
 runtime: python313
-entrypoint: python -m src.service_runner
+entrypoint: gunicorn -w 1 -k uvicorn.workers.UvicornWorker -b :$PORT main:app
 
 # Instance configuration
 instance_class: F2
