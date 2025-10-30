@@ -11,8 +11,10 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 # Import from firebase module
 try:
+    from src.firebase.engine_event_dao import EngineEventDAO
     from src.firebase.market_dao import MarketDAO
 except ImportError:
+    from firebase.engine_event_dao import EngineEventDAO  # type: ignore[no-redef]
     from firebase.market_dao import MarketDAO  # type: ignore[no-redef]
 
 # Import Kalshi service - handle both direct and relative imports
@@ -57,6 +59,7 @@ class MarketCrawler:
         self.scheduler = AsyncIOScheduler()
         self.kalshi_service: Optional[KalshiAPIService] = None
         self.market_dao: Optional[MarketDAO] = None
+        self.engine_event_dao: Optional[EngineEventDAO] = None
         self.is_running = False
 
     async def _initialize_services(self):
@@ -69,6 +72,12 @@ class MarketCrawler:
 
         if not self.market_dao:
             self.market_dao = MarketDAO(
+                project_id=self.firebase_project_id,
+                credentials_path=self.firebase_credentials_path,
+            )
+
+        if not self.engine_event_dao:
+            self.engine_event_dao = EngineEventDAO(
                 project_id=self.firebase_project_id,
                 credentials_path=self.firebase_credentials_path,
             )
@@ -93,6 +102,16 @@ class MarketCrawler:
 
             print(f"[{datetime.now()}] Retrieved {len(markets)} open markets")
             sys.stdout.flush()
+
+            # Record crawl event
+            if self.engine_event_dao:
+                try:
+                    self.engine_event_dao.create_event(
+                        event_name="crawl_markets",
+                        event_metadata={"total_markets": len(markets)},
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to log crawl event: {e}")
 
             if not markets:
                 print(f"[{datetime.now()}] No markets to process")
@@ -147,6 +166,19 @@ class MarketCrawler:
             print(f"[{datetime.now()}] Retrieved {len(markets)} filtered open markets")
             sys.stdout.flush()
 
+            # Record crawl with filtering event
+            if self.engine_event_dao:
+                try:
+                    self.engine_event_dao.create_event(
+                        event_name="crawl_markets_with_filtering",
+                        event_metadata={
+                            "total_markets": len(markets),
+                            "max_close_ts": max_close_ts,
+                        },
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to log crawl event: {e}")
+
             if not markets:
                 print(f"[{datetime.now()}] No markets to process within time window")
                 sys.stdout.flush()
@@ -191,6 +223,17 @@ class MarketCrawler:
                 count = self.market_dao.batch_create_markets(markets)
                 print(f"[{datetime.now()}] Successfully upserted " f"{count} markets")
                 sys.stdout.flush()
+
+                # Record upsert event
+                if self.engine_event_dao:
+                    try:
+                        self.engine_event_dao.create_event(
+                            event_name="upsert_markets",
+                            event_metadata={"total_markets": count},
+                        )
+                    except Exception as e:
+                        print(f"Warning: Failed to log upsert event: {e}")
+
                 return count
             except Exception as e:
                 if attempt < self.max_retries - 1:
@@ -261,6 +304,8 @@ class MarketCrawler:
         self.stop()
         if self.market_dao:
             self.market_dao.close()
+        if self.engine_event_dao:
+            self.engine_event_dao.close()
         if self.kalshi_service:
             await self.kalshi_service.__aexit__(None, None, None)
 
