@@ -126,6 +126,18 @@ class MarketCrawler:
                         self.market_dao.get_stale_active_market_tickers(cutoff) or []
                     )
                     if isinstance(stale_tickers, list) and stale_tickers:
+                        # Log stale tickers event
+                        if self.engine_event_dao:
+                            try:
+                                self.engine_event_dao.create_event(
+                                    event_name="stale_markets_found",
+                                    event_metadata={
+                                        "count": len(stale_tickers),
+                                    },
+                                )
+                            except Exception as e:
+                                print(f"[{datetime.now()}] Event log failed: {e}")
+                                sys.stdout.flush()
                         tickers_param = ",".join(stale_tickers)
                         # Use a separate name to keep lines short
                         async with self.kalshi_service as svc:  # type: ignore
@@ -134,6 +146,18 @@ class MarketCrawler:
                             )
                         # Upsert refreshed markets
                         await self._upsert_markets(refresh_markets)
+                        # Log refresh completion
+                        if self.engine_event_dao:
+                            try:
+                                self.engine_event_dao.create_event(
+                                    event_name="stale_markets_refreshed",
+                                    event_metadata={
+                                        "refreshed": len(refresh_markets),
+                                    },
+                                )
+                            except Exception as e:
+                                print(f"[{datetime.now()}] Event log failed: {e}")
+                                sys.stdout.flush()
             except Exception as refresh_error:
                 print(
                     f"[{datetime.now()}] Stale market refresh failed: {refresh_error}"
@@ -214,6 +238,18 @@ class MarketCrawler:
                         self.market_dao.get_stale_active_market_tickers(cutoff) or []
                     )
                     if isinstance(stale_tickers, list) and stale_tickers:
+                        # Log stale tickers event
+                        if self.engine_event_dao:
+                            try:
+                                self.engine_event_dao.create_event(
+                                    event_name="stale_markets_found",
+                                    event_metadata={
+                                        "count": len(stale_tickers),
+                                    },
+                                )
+                            except Exception as e:
+                                print(f"[{datetime.now()}] Event log failed: {e}")
+                                sys.stdout.flush()
                         tickers_param = ",".join(stale_tickers)
                         # Use a separate name to keep lines short
                         async with self.kalshi_service as svc:  # type: ignore
@@ -222,6 +258,18 @@ class MarketCrawler:
                             )
                         # Upsert refreshed markets
                         await self._upsert_markets(refresh_markets)
+                        # Log refresh completion
+                        if self.engine_event_dao:
+                            try:
+                                self.engine_event_dao.create_event(
+                                    event_name="stale_markets_refreshed",
+                                    event_metadata={
+                                        "refreshed": len(refresh_markets),
+                                    },
+                                )
+                            except Exception as e:
+                                print(f"[{datetime.now()}] Event log failed: {e}")
+                                sys.stdout.flush()
             except Exception as refresh_error:
                 print(
                     f"[{datetime.now()}] Stale market refresh failed: {refresh_error}"
