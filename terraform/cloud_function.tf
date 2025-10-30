@@ -1,19 +1,33 @@
 # Google Cloud Function for market crawler
 # This function runs the market crawler once per invocation
 
-# Archive the entire src directory (includes the Cloud Function at functions/market_crawler/)
+# Archive the function code with proper structure
+# Cloud Functions expects requirements.txt and main.py at the root level
 data "archive_file" "market_crawler_function" {
   type        = "zip"
   output_path = "${path.module}/market_crawler_function.zip"
-  source_dir  = "${path.module}/../src"
-  excludes = [
-    "__pycache__",
-    "**/__pycache__",
-    "*.pyc",
-    "**/*.pyc",
-    ".pytest_cache",
-    "**/.pytest_cache",
-  ]
+
+  # Include requirements.txt at root (from functions/market_crawler/)
+  source {
+    content  = file("${path.module}/../src/functions/market_crawler/requirements.txt")
+    filename = "requirements.txt"
+  }
+
+  # Include main.py at root (from functions/market_crawler/)
+  source {
+    content  = file("${path.module}/../src/functions/market_crawler/main.py")
+    filename = "main.py"
+  }
+
+  # Include all Python files from src/ (except the functions dir itself)
+  dynamic "source" {
+    for_each = fileset("${path.module}/../src", "**/*.py")
+    content {
+      content  = file("${path.module}/../src/${source.value}")
+      # Don't duplicate main.py from functions/market_crawler
+      filename = source.value == "functions/market_crawler/main.py" ? ".ignore" : source.value
+    }
+  }
 }
 
 # Upload function source to storage bucket
@@ -31,7 +45,7 @@ resource "google_cloudfunctions2_function" "market_crawler" {
 
   build_config {
     runtime     = "python313"
-    entry_point = "functions.market_crawler.main.crawl_markets"
+    entry_point = "crawl_markets"
     source {
       storage_source {
         bucket = google_storage_bucket.kalshihub_data.name
