@@ -99,7 +99,21 @@ jobs:
       run: terraform fmt -check
       continue-on-error: true
 
-    - name: Terraform Init
+    - name: Check if state bucket exists
+      id: check_bucket
+      run: |
+        if gsutil ls gs://${{ secrets.GCP_PROJECT_ID }}-kalshihub-data 2>/dev/null; then
+          echo "bucket_exists=true" >> $GITHUB_OUTPUT
+        else
+          echo "bucket_exists=false" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Terraform Init (without backend - first time)
+      if: steps.check_bucket.outputs.bucket_exists == 'false'
+      run: terraform init
+
+    - name: Terraform Init (with backend - subsequent runs)
+      if: steps.check_bucket.outputs.bucket_exists == 'true'
       run: |
         terraform init \
           -backend-config="bucket=${{ secrets.GCP_PROJECT_ID }}-kalshihub-data"
@@ -118,6 +132,13 @@ jobs:
 
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
+
+    - name: Migrate state to remote backend (first time only)
+      if: steps.check_bucket.outputs.bucket_exists == 'false'
+      run: |
+        # After bucket is created, migrate state to remote backend
+        terraform init -migrate-state -force-copy \
+          -backend-config="bucket=${{ secrets.GCP_PROJECT_ID }}-kalshihub-data"
 
     - name: Terraform Output
       run: terraform output -json > terraform-outputs.json
