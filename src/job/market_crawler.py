@@ -206,6 +206,28 @@ class MarketCrawler:
 
             success_count = await self._upsert_markets(markets)
 
+            # Second pass: refresh stale active markets
+            try:
+                if self.market_dao:
+                    cutoff = datetime.now() - timedelta(minutes=5)
+                    stale_tickers = (
+                        self.market_dao.get_stale_active_market_tickers(cutoff) or []
+                    )
+                    if isinstance(stale_tickers, list) and stale_tickers:
+                        tickers_param = ",".join(stale_tickers)
+                        # Use a separate name to keep lines short
+                        async with self.kalshi_service as svc:  # type: ignore
+                            refresh_markets = await svc.get_markets(
+                                tickers=tickers_param
+                            )
+                        # Upsert refreshed markets
+                        await self._upsert_markets(refresh_markets)
+            except Exception as refresh_error:
+                print(
+                    f"[{datetime.now()}] Stale market refresh failed: {refresh_error}"
+                )
+                sys.stdout.flush()
+
             print(
                 f"[{datetime.now()}] Filtered crawl completed: {success_count}/"
                 f"{len(markets)} markets processed successfully"
