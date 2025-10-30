@@ -40,13 +40,43 @@ class FirebaseSchemaManager:
         return self._db
 
     def get_schema_definition(self) -> Dict[str, Any]:
-        """Get the Firestore schema definition for markets collection.
+        """Get the Firestore schema definition for all collections.
 
         Returns:
             Dictionary containing the schema definition
         """
         return {
             "collections": {
+                "engine_events": {
+                    "description": (
+                        "Engine events collection tracking key system events"
+                    ),
+                    "fields": {
+                        "event_id": {
+                            "type": "string",
+                            "description": "Unique event identifier (primary key)",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "timestamp": {
+                            "type": "timestamp",
+                            "description": "Event occurrence timestamp",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "event_name": {
+                            "type": "string",
+                            "description": "Name/type of the event",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "event_metadata": {
+                            "type": "map",
+                            "description": "JSON metadata for the event",
+                            "required": False,
+                        },
+                    },
+                },
                 "markets": {
                     "description": (
                         "Market data collection for Kalshi prediction markets"
@@ -150,7 +180,7 @@ class FirebaseSchemaManager:
                             "indexed": True,
                         },
                     },
-                }
+                },
             }
         }
 
