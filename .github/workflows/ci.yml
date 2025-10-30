@@ -74,7 +74,6 @@ jobs:
     # Only run on push to main branch
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     environment: DEV
-
     defaults:
       run:
         working-directory: ./terraform
@@ -99,53 +98,13 @@ jobs:
       run: terraform fmt -check
       continue-on-error: true
 
-    - name: Check if state bucket exists
-      id: check_bucket
-      run: |
-        if gsutil ls gs://${{ secrets.GCP_PROJECT_ID }}-kalshihub-data 2>/dev/null; then
-          echo "bucket_exists=true" >> $GITHUB_OUTPUT
-        else
-          echo "bucket_exists=false" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Terraform Init (without backend - first time)
-      if: steps.check_bucket.outputs.bucket_exists == 'false'
-      run: terraform init
-
     - name: Terraform Init (with backend - subsequent runs)
-      if: steps.check_bucket.outputs.bucket_exists == 'true'
       run: |
         terraform init \
           -backend-config="bucket=${{ secrets.GCP_PROJECT_ID }}-kalshihub-data"
 
     - name: Terraform Validate
       run: terraform validate
-
-    - name: Import existing bucket into state (if exists and not in state)
-      if: steps.check_bucket.outputs.bucket_exists == 'true'
-      run: |
-        # Check if bucket is already in state
-        if ! terraform state list | grep -q "google_storage_bucket.kalshihub_data"; then
-          echo "Importing existing bucket into Terraform state..."
-          terraform import \
-            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-            -var="service_account_email=${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}" \
-            -var="region=us-central1" \
-            -var="environment=dev" \
-            google_storage_bucket.kalshihub_data \
-            ${{ secrets.GCP_PROJECT_ID }}-kalshihub-data
-
-          # Also import IAM binding if it exists
-          terraform import \
-            -var="project_id=${{ secrets.GCP_PROJECT_ID }}" \
-            -var="service_account_email=${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}" \
-            -var="region=us-central1" \
-            -var="environment=dev" \
-            google_storage_bucket_iam_member.kalshihub_data_admin \
-            "b/${{ secrets.GCP_PROJECT_ID }}-kalshihub-data roles/storage.objectAdmin serviceAccount:${{ secrets.GCP_SERVICE_ACCOUNT_EMAIL }}" || true
-        else
-          echo "Bucket already in state, skipping import"
-        fi
 
     - name: Terraform Plan
       run: |
@@ -158,13 +117,6 @@ jobs:
 
     - name: Terraform Apply
       run: terraform apply -auto-approve tfplan
-
-    - name: Migrate state to remote backend (first time only)
-      if: steps.check_bucket.outputs.bucket_exists == 'false'
-      run: |
-        # After bucket is created, migrate state to remote backend
-        terraform init -migrate-state -force-copy \
-          -backend-config="bucket=${{ secrets.GCP_PROJECT_ID }}-kalshihub-data"
 
     - name: Terraform Output
       run: terraform output -json > terraform-outputs.json
