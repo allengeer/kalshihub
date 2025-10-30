@@ -243,6 +243,8 @@ class MarketDAO:
                 return False
 
             market_data = self._market_to_dict(market)
+            # Preserve original created_at; do not overwrite on updates
+            market_data.pop("created_at", None)
             market_ref.update(market_data)
             return True
         except Exception as e:
@@ -290,8 +292,15 @@ class MarketDAO:
             for i, market in enumerate(markets):
                 try:
                     market_ref = db.collection("markets").document(market.ticker)
-                    market_data = self._market_to_dict(market)
-                    bulk_writer.set(market_ref, market_data)
+                    # If existing, update without changing created_at
+                    # Else, create with created_at
+                    if market_ref.get().exists:
+                        market_data = self._market_to_dict(market)
+                        market_data.pop("created_at", None)
+                        bulk_writer.update(market_ref, market_data)
+                    else:
+                        market_data = self._market_to_dict(market)
+                        bulk_writer.set(market_ref, market_data)
                     success_count += 1
 
                     # Print progress every 1000 markets
@@ -338,6 +347,8 @@ class MarketDAO:
                 try:
                     market_ref = db.collection("markets").document(market.ticker)
                     market_data = self._market_to_dict(market)
+                    # Preserve original created_at during updates
+                    market_data.pop("created_at", None)
                     batch.update(market_ref, market_data)
                     success_count += 1
                 except Exception as e:
