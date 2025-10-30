@@ -503,6 +503,54 @@ class MarketDAO:
             print(f"Failed to convert dict to market: {e}")
             return None
 
+    def get_all_markets(self) -> List[Market]:
+        """Get all markets from the collection.
+
+        Returns:
+            List of Market objects
+        """
+        try:
+            db = self._get_db()
+            markets_ref = db.collection("markets")
+            markets_docs = markets_ref.stream()
+
+            markets = []
+            for doc in markets_docs:
+                market = self._dict_to_market(doc.to_dict())
+                if market:
+                    markets.append(market)
+
+            return markets
+        except Exception as e:
+            print(f"Failed to get all markets: {e}")
+            return []
+
+    def count_markets(self) -> int:
+        """Count all markets in the collection.
+
+        Returns:
+            Number of markets
+        """
+        try:
+            db = self._get_db()
+            markets_ref = db.collection("markets")
+            # Use count aggregation for efficiency
+            count_query = markets_ref.count()
+            count_result = count_query.get()
+            # Extract count value from aggregation result
+            count_value = count_result[0][0].value
+            return int(count_value) if count_value is not None else 0
+        except Exception as e:
+            print(f"Failed to count markets: {e}")
+            # Fallback to streaming and counting
+            try:
+                markets_ref = db.collection("markets")
+                count = sum(1 for _ in markets_ref.stream())
+                return count
+            except Exception as fallback_error:
+                print(f"Fallback count also failed: {fallback_error}")
+                return 0
+
     async def clear_all_markets(self) -> bool:
         """Clear all markets from the collection using BulkWriter.
 
