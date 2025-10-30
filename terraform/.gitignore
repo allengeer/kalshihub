@@ -31,3 +31,6 @@ terraform.rc
 
 # Lock file (commit this in a team environment)
 # .terraform.lock.hcl
+
+# Cloud Function zip files
+*.zip

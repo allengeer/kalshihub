@@ -1,0 +1,83 @@
+# Google Cloud Function for market crawler
+# This function runs the market crawler once per invocation
+
+# Archive the function source code including src directory
+data "archive_file" "market_crawler_function" {
+  type        = "zip"
+  output_path = "${path.module}/market_crawler_function.zip"
+
+  source {
+    content  = file("${path.module}/../functions/market_crawler/main.py")
+    filename = "main.py"
+  }
+
+  source {
+    content  = file("${path.module}/../functions/market_crawler/requirements.txt")
+    filename = "requirements.txt"
+  }
+
+  # Include the entire src directory
+  dynamic "source" {
+    for_each = fileset("${path.module}/../src", "**/*.py")
+    content {
+      content  = file("${path.module}/../src/${source.value}")
+      filename = "src/${source.value}"
+    }
+  }
+}
+
+# Upload function source to storage bucket
+resource "google_storage_bucket_object" "market_crawler_function" {
+  name   = "functions/market_crawler-${data.archive_file.market_crawler_function.output_md5}.zip"
+  bucket = google_storage_bucket.kalshihub_data.name
+  source = data.archive_file.market_crawler_function.output_path
+}
+
+# Cloud Function resource
+resource "google_cloudfunctions2_function" "market_crawler" {
+  name        = "market-crawler"
+  location    = var.region
+  description = "Crawls market data from Kalshi API and stores in Firebase"
+
+  build_config {
+    runtime     = "python313"
+    entry_point = "crawl_markets"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.kalshihub_data.name
+        object = google_storage_bucket_object.market_crawler_function.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count    = 1
+    min_instance_count    = 0
+    available_memory      = "512Mi"
+    timeout_seconds       = 540
+    service_account_email = var.service_account_email
+
+    environment_variables = {
+      FIREBASE_PROJECT_ID        = var.project_id
+      KALSHI_BASE_URL            = "https://api.elections.kalshi.com/trade-api/v2"
+      KALSHI_RATE_LIMIT          = "20.0"
+      CRAWLER_MAX_RETRIES        = "3"
+      CRAWLER_RETRY_DELAY_SECONDS = "1"
+    }
+  }
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    application = "kalshihub"
+  }
+}
+
+# IAM member to allow unauthenticated invocation (for Cloud Scheduler)
+resource "google_cloudfunctions2_function_iam_member" "market_crawler_invoker" {
+  project        = google_cloudfunctions2_function.market_crawler.project
+  location       = google_cloudfunctions2_function.market_crawler.location
+  cloud_function = google_cloudfunctions2_function.market_crawler.name
+  role           = "roles/cloudfunctions.invoker"
+  member         = "serviceAccount:${var.service_account_email}"
+}
