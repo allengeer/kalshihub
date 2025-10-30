@@ -594,7 +594,7 @@ class MarketDAO:
 
     def close(self):
         """Close Firebase connections."""
-        if self._app:
-            firebase_admin.delete_app(self._app)
-            self._app = None
+        # if self._app:
+        #     firebase_admin.delete_app(self._app)
+        #     self._app = None
         self._db = None
