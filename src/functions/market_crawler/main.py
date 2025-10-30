@@ -12,6 +12,7 @@ from typing import Optional
 import functions_framework
 from flask import Request
 
+from firebase.engine_event_dao import EngineEventDAO
 from job.market_crawler import MarketCrawler
 
 
@@ -25,7 +26,8 @@ def crawl_markets(request: Request) -> tuple[str, int]:
     Returns:
         Tuple of (response_body, status_code)
     """
-    print(f"[{datetime.now()}] Market crawler function invoked")
+    start_time = datetime.now()
+    print(f"[{start_time}] Market crawler function invoked")
 
     # Parse request parameters
     request_json = request.get_json(silent=True)
@@ -38,23 +40,103 @@ def crawl_markets(request: Request) -> tuple[str, int]:
     elif request_args and "max_close_ts" in request_args:
         max_close_ts = int(request_args["max_close_ts"])
 
+    # Get Firebase project ID for event logging
+    firebase_project_id = os.getenv("FIREBASE_PROJECT_ID")
+
+    # Initialize event DAO (if project ID available)
+    event_dao = None
+    if firebase_project_id:
+        try:
+            event_dao = EngineEventDAO(project_id=firebase_project_id)
+            # Record function invocation event
+            event_dao.create_event(
+                event_name="market_crawler_invoked",
+                event_metadata={
+                    "max_close_ts": max_close_ts,
+                    "has_max_close_ts": max_close_ts is not None,
+                },
+                timestamp=start_time,
+            )
+        except Exception as e:
+            print(f"Warning: Failed to initialize event logging: {e}")
+            event_dao = None
+
     # Run the crawler
     try:
         success = asyncio.run(run_crawler(max_close_ts))
+        end_time = datetime.now()
+        duration_seconds = (end_time - start_time).total_seconds()
 
         if success:
             message = "Market crawl completed successfully"
-            print(f"[{datetime.now()}] {message}")
+            print(f"[{end_time}] {message}")
+
+            # Record success event
+            if event_dao:
+                try:
+                    event_dao.create_event(
+                        event_name="market_crawler_completed",
+                        event_metadata={
+                            "success": True,
+                            "max_close_ts": max_close_ts,
+                            "duration_seconds": duration_seconds,
+                        },
+                        timestamp=end_time,
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to log success event: {e}")
+
             return message, 200
         else:
             message = "Market crawl failed"
-            print(f"[{datetime.now()}] {message}")
+            print(f"[{end_time}] {message}")
+
+            # Record failure event
+            if event_dao:
+                try:
+                    event_dao.create_event(
+                        event_name="market_crawler_completed",
+                        event_metadata={
+                            "success": False,
+                            "max_close_ts": max_close_ts,
+                            "duration_seconds": duration_seconds,
+                        },
+                        timestamp=end_time,
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to log failure event: {e}")
+
             return message, 500
 
     except Exception as e:
+        end_time = datetime.now()
+        duration_seconds = (end_time - start_time).total_seconds()
         error_msg = f"Market crawl error: {str(e)}"
-        print(f"[{datetime.now()}] {error_msg}")
+        print(f"[{end_time}] {error_msg}")
+
+        # Record error event
+        if event_dao:
+            try:
+                event_dao.create_event(
+                    event_name="market_crawler_error",
+                    event_metadata={
+                        "error": str(e),
+                        "max_close_ts": max_close_ts,
+                        "duration_seconds": duration_seconds,
+                    },
+                    timestamp=end_time,
+                )
+            except Exception as log_error:
+                print(f"Warning: Failed to log error event: {log_error}")
+
         return error_msg, 500
+    finally:
+        # Clean up event DAO connection
+        if event_dao:
+            try:
+                event_dao.close()
+            except Exception as e:
+                print(f"Warning: Failed to close event DAO: {e}")
 
 
 async def run_crawler(max_close_ts: Optional[int] = None) -> bool:
