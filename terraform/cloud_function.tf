@@ -1,29 +1,19 @@
 # Google Cloud Function for market crawler
 # This function runs the market crawler once per invocation
 
-# Archive the function source code including src directory
+# Archive the entire src directory (includes the Cloud Function at functions/market_crawler/)
 data "archive_file" "market_crawler_function" {
   type        = "zip"
   output_path = "${path.module}/market_crawler_function.zip"
-
-  source {
-    content  = file("${path.module}/../functions/market_crawler/main.py")
-    filename = "main.py"
-  }
-
-  source {
-    content  = file("${path.module}/../functions/market_crawler/requirements.txt")
-    filename = "requirements.txt"
-  }
-
-  # Include the entire src directory
-  dynamic "source" {
-    for_each = fileset("${path.module}/../src", "**/*.py")
-    content {
-      content  = file("${path.module}/../src/${source.value}")
-      filename = "src/${source.value}"
-    }
-  }
+  source_dir  = "${path.module}/../src"
+  excludes = [
+    "__pycache__",
+    "**/__pycache__",
+    "*.pyc",
+    "**/*.pyc",
+    ".pytest_cache",
+    "**/.pytest_cache",
+  ]
 }
 
 # Upload function source to storage bucket
@@ -41,7 +31,7 @@ resource "google_cloudfunctions2_function" "market_crawler" {
 
   build_config {
     runtime     = "python313"
-    entry_point = "crawl_markets"
+    entry_point = "functions.market_crawler.main.crawl_markets"
     source {
       storage_source {
         bucket = google_storage_bucket.kalshihub_data.name

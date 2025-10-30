@@ -6,17 +6,13 @@ crawler once per invocation.
 
 import asyncio
 import os
-import sys
 from datetime import datetime
 from typing import Optional
 
-# Add parent directories to path before importing
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
+import functions_framework
+from flask import Request
 
-import functions_framework  # noqa: E402
-from flask import Request  # noqa: E402
-
-from src.job.market_crawler import MarketCrawler  # noqa: E402
+from job.market_crawler import MarketCrawler
 
 
 @functions_framework.http
@@ -105,7 +101,7 @@ async def run_crawler(max_close_ts: Optional[int] = None) -> bool:
             print(f"[{datetime.now()}] Running crawler for all open markets")
             success = await crawler.run_once()
 
-        return success
+        return bool(success)
 
     except Exception as e:
         print(f"[{datetime.now()}] Crawler exception: {e}")
