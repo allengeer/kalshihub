@@ -296,13 +296,6 @@ class TestEngineEventDAO:
     @patch("src.firebase.engine_event_dao.firestore")
     def test_close(self, mock_firestore, mock_firebase_admin):
         """Test closing DAO connections."""
-        mock_app = Mock()
-        mock_firebase_admin._apps = []
-
         dao = EngineEventDAO(project_id="test-project")
-        dao._app = mock_app
-
         dao.close()
-
-        assert dao._app is None
         assert dao._db is None

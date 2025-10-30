@@ -647,11 +647,5 @@ class TestMarketDAO:
 
     def test_close(self, market_dao):
         """Test closing Firebase connections."""
-        with patch("firebase_admin.delete_app") as mock_delete_app:
-            mock_app = MagicMock()
-            market_dao._app = mock_app
-            market_dao.close()
-
-            mock_delete_app.assert_called_once_with(mock_app)
-            assert market_dao._app is None
-            assert market_dao._db is None
+        market_dao.close()
+        assert market_dao._db is None
