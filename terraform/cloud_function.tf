@@ -43,7 +43,7 @@ resource "google_cloudfunctions2_function" "market_crawler" {
   service_config {
     max_instance_count    = 1
     min_instance_count    = 0
-    available_memory      = "512Mi"
+    available_memory      = "4Gi"
     timeout_seconds       = 540
     service_account_email = var.service_account_email
 
