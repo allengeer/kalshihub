@@ -135,9 +135,4 @@ resource "google_cloud_scheduler_job" "market_crawl_schedule" {
       max_close_delta_minutes = "1440"
     }))
   }
-
-  labels = {
-    environment = var.environment
-    application = "kalshihub"
-  }
 }
