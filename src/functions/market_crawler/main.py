@@ -6,7 +6,7 @@ crawler once per invocation.
 
 import asyncio
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 import functions_framework
@@ -33,12 +33,31 @@ def crawl_markets(request: Request) -> tuple[str, int]:
     request_json = request.get_json(silent=True)
     request_args = request.args
 
-    # Get max_close_ts from request (optional)
+    # Get max_close_ts or compute via delta from request (optional)
     max_close_ts = None
     if request_json and "max_close_ts" in request_json:
         max_close_ts = int(request_json["max_close_ts"])
     elif request_args and "max_close_ts" in request_args:
         max_close_ts = int(request_args["max_close_ts"])
+
+    # Support delta-based filtering: max_close_delta_minutes
+    # If provided, compute max_close_ts = now + delta (minutes)
+    if max_close_ts is None:
+        delta_param = None
+        if request_json and "max_close_delta_minutes" in request_json:
+            delta_param = request_json["max_close_delta_minutes"]
+        elif request_args and "max_close_delta_minutes" in request_args:
+            delta_param = request_args["max_close_delta_minutes"]
+
+        if delta_param is not None:
+            try:
+                delta_minutes = int(delta_param)
+                max_close_ts = int(
+                    (datetime.now() + timedelta(minutes=delta_minutes)).timestamp()
+                )
+            except Exception:
+                # Ignore malformed delta; leave max_close_ts as None
+                max_close_ts = None
 
     # Get Firebase project ID for event logging
     firebase_project_id = os.getenv("FIREBASE_PROJECT_ID")
@@ -53,6 +72,16 @@ def crawl_markets(request: Request) -> tuple[str, int]:
                 event_name="market_crawler_invoked",
                 event_metadata={
                     "max_close_ts": max_close_ts,
+                    "max_close_delta_minutes": (
+                        int(request_args.get("max_close_delta_minutes"))
+                        if request_args and request_args.get("max_close_delta_minutes")
+                        else (
+                            int(request_json.get("max_close_delta_minutes"))
+                            if request_json
+                            and request_json.get("max_close_delta_minutes")
+                            else None
+                        )
+                    ),
                     "has_max_close_ts": max_close_ts is not None,
                 },
                 timestamp=start_time,
