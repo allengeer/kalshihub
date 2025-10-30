@@ -112,6 +112,24 @@ class TestMarketCrawler:
             mock_upsert.assert_called_once_with(sample_markets)
 
     @pytest.mark.asyncio
+    async def test_crawl_markets_refresh_stale(self, crawler, sample_markets):
+        """Test second-pass refresh for stale markets."""
+        crawler.market_dao = MagicMock()
+        crawler.market_dao.get_stale_active_market_tickers = MagicMock(
+            return_value=["T1", "T2"]
+        )
+        crawler.kalshi_service = AsyncMock()
+        crawler.kalshi_service.__aenter__.return_value = crawler.kalshi_service
+        crawler.kalshi_service.__aexit__.return_value = AsyncMock(return_value=None)
+        crawler.kalshi_service.getAllOpenMarkets = AsyncMock(
+            return_value=sample_markets
+        )
+
+        with patch.object(crawler, "_upsert_markets", return_value=5) as mock_upsert:
+            await crawler._crawl_markets()
+            assert mock_upsert.call_count == 2
+
+    @pytest.mark.asyncio
     async def test_crawl_markets_no_markets(self, crawler):
         """Test crawling when no markets are available."""
         # Initialize kalshi_service

@@ -649,3 +649,27 @@ class TestMarketDAO:
         """Test closing Firebase connections."""
         market_dao.close()
         assert market_dao._db is None
+
+    def test_get_stale_active_market_tickers(self, market_dao):
+        """Test fetching stale active market tickers."""
+        mock_db = MagicMock()
+        mock_collection = MagicMock()
+        mock_query = MagicMock()
+        mock_docs = [
+            MagicMock(to_dict=MagicMock(return_value={"ticker": "A"})),
+            MagicMock(to_dict=MagicMock(return_value={"ticker": "B"})),
+        ]
+
+        mock_query.stream.return_value = mock_docs
+        mock_query.limit.return_value = mock_query
+        mock_query.order_by.return_value = mock_query
+        mock_query.where.return_value = mock_query
+        mock_collection.where.return_value = mock_query
+        mock_db.collection.return_value = mock_collection
+
+        with patch.object(market_dao, "_get_db", return_value=mock_db):
+            from datetime import timedelta
+
+            cutoff = datetime.now() - timedelta(minutes=5)
+            result = market_dao.get_stale_active_market_tickers(cutoff)
+            assert result == ["A", "B"]

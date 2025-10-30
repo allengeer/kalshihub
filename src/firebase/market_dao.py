@@ -403,13 +403,12 @@ class MarketDAO:
             db = self._get_db()
             # Firestore limitation: avoid "!=" on status with another range filter
             # Query for active statuses explicitly
-            active_statuses = ["open", "unopened"]
+            active_statuses = ["initialized", "active", "settled", "determined"]
             query = (
                 db.collection("markets")
                 .where("status", "in", active_statuses)
                 .where("updated_at", "<", cutoff_time)
                 .order_by("updated_at")
-                .limit(1000)
             )
 
             docs = query.stream()
