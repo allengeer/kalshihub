@@ -7,31 +7,6 @@ resource "google_storage_bucket" "kalshihub_data" {
   # Uniform bucket-level access
   uniform_bucket_level_access = true
 
-  # Versioning for data protection
-  versioning {
-    enabled = true
-  }
-
-  # Lifecycle rules
-  lifecycle_rule {
-    condition {
-      age = 90
-    }
-    action {
-      type = "Delete"
-    }
-  }
-
-  lifecycle_rule {
-    condition {
-      age = 30
-    }
-    action {
-      type          = "SetStorageClass"
-      storage_class = "NEARLINE"
-    }
-  }
-
   # Labels for organization
   labels = {
     environment = var.environment

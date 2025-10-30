@@ -8,12 +8,12 @@ terraform {
     }
   }
 
-  # Backend configuration for state storage
-  # Uncomment and configure after creating the state bucket manually
-  # backend "gcs" {
-  #   bucket = "kalshihub-terraform-state"
-  #   prefix = "terraform/state"
-  # }
+  # Backend configuration for remote state storage in GCS
+  # Uses the kalshihub_data bucket for state storage
+  backend "gcs" {
+    bucket = ""  # Will be set via backend-config flag: {project_id}-kalshihub-data
+    prefix = "terraform/state"
+  }
 }
 
 provider "google" {

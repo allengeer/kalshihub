@@ -154,32 +154,37 @@ gh run download --name terraform-outputs
 
 ## State Management
 
-### Local State
+### Remote State Storage
 
-By default, Terraform state is stored locally in `terraform.tfstate`. This is suitable for development but **not recommended for production**.
+Terraform state is stored remotely in the `kalshihub_data` GCS bucket under the `terraform/state` prefix. This provides:
+- **Team Collaboration**: Multiple team members can work with the same state
+- **State Locking**: Prevents concurrent modifications
+- **Versioning**: State file history is preserved
+- **Security**: State is stored in a protected GCS bucket
 
-### Remote State (Recommended)
+### First-Time Setup
 
-For team environments and production, configure remote state storage:
+On the **very first deployment**, the state will be local until the bucket is created:
 
-1. **Create a state bucket manually** (one-time setup):
+1. **First run** (creates the bucket with local state):
    ```bash
-   gsutil mb gs://kalshihub-terraform-state
-   gsutil versioning set on gs://kalshihub-terraform-state
+   cd terraform
+   terraform init
+   terraform apply
    ```
 
-2. **Uncomment the backend configuration in `main.tf`**:
-   ```hcl
-   backend "gcs" {
-     bucket = "kalshihub-terraform-state"
-     prefix = "terraform/state"
-   }
-   ```
-
-3. **Migrate state**:
+2. **Migrate to remote state** (after bucket exists):
    ```bash
-   terraform init -migrate-state
+   terraform init -migrate-state \
+     -backend-config="bucket=YOUR_PROJECT_ID-kalshihub-data"
    ```
+
+### CI/CD State Management
+
+The GitHub Actions workflow automatically uses remote state:
+- Backend bucket: `{project_id}-kalshihub-data`
+- State prefix: `terraform/state`
+- Configured via `-backend-config` flag during `terraform init`
 
 ## Best Practices
 

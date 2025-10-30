@@ -1,5 +1,5 @@
 output "storage_bucket_name" {
-  description = "The name of the created storage bucket"
+  description = "The name of the storage bucket (also used for Terraform state)"
   value       = google_storage_bucket.kalshihub_data.name
 }
 

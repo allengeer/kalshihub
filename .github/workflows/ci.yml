@@ -100,7 +100,9 @@ jobs:
       continue-on-error: true
 
     - name: Terraform Init
-      run: terraform init
+      run: |
+        terraform init \
+          -backend-config="bucket=${{ secrets.GCP_PROJECT_ID }}-kalshihub-data"
 
     - name: Terraform Validate
       run: terraform validate
