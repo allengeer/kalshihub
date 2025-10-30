@@ -390,6 +390,41 @@ class MarketDAO:
             print(f"Failed to get markets by status {status}: {e}")
             return []
 
+    def get_stale_active_market_tickers(self, cutoff_time: datetime) -> List[str]:
+        """Get tickers for markets not closed and not updated since cutoff.
+
+        Args:
+            cutoff_time: Datetime; markets with updated_at older than this are stale
+
+        Returns:
+            List of market tickers needing refresh
+        """
+        try:
+            db = self._get_db()
+            # Firestore limitation: avoid "!=" on status with another range filter
+            # Query for active statuses explicitly
+            active_statuses = ["open", "unopened"]
+            query = (
+                db.collection("markets")
+                .where("status", "in", active_statuses)
+                .where("updated_at", "<", cutoff_time)
+                .order_by("updated_at")
+                .limit(1000)
+            )
+
+            docs = query.stream()
+            tickers: List[str] = []
+            for doc in docs:
+                data = doc.to_dict() or {}
+                ticker = data.get("ticker")
+                if ticker:
+                    tickers.append(ticker)
+
+            return tickers
+        except Exception as e:
+            print(f"Failed to get stale active markets: {e}")
+            return []
+
     def get_markets_by_event(self, event_ticker: str) -> List[Market]:
         """Get all markets for a specific event.
 

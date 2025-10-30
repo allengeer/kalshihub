@@ -107,12 +107,14 @@ resource "google_pubsub_topic_iam_member" "market_crawl_publisher" {
 resource "google_pubsub_subscription" "market_crawl_push" {
   name  = "market-crawl-push"
   topic = google_pubsub_topic.market_crawl.name
+  ack_deadline_seconds = 600
 
   push_config {
     push_endpoint = google_cloudfunctions2_function.market_crawler.service_config[0].uri
     oidc_token {
       service_account_email = var.service_account_email
     }
+
   }
 
   labels = {
