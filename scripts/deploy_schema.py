@@ -18,11 +18,15 @@ from firebase.schema import FirebaseSchemaManager
 def main():
     """Deploy Firebase schema and validate deployment."""
     # Get configuration from environment variables
-    project_id = os.getenv("FIREBASE_PROJECT_ID")
+    # Support both FIREBASE_PROJECT_ID and GCP_PROJECT_ID for compatibility
+    project_id = os.getenv("FIREBASE_PROJECT_ID") or os.getenv("GCP_PROJECT_ID")
     credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
 
     if not project_id:
-        print("Error: FIREBASE_PROJECT_ID environment variable is required")
+        print(
+            "Error: FIREBASE_PROJECT_ID or GCP_PROJECT_ID "
+            "environment variable is required"
+        )
         sys.exit(1)
 
     print(f"Deploying schema to Firebase project: {project_id}")

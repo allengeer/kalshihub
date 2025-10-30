@@ -197,9 +197,9 @@ class FirebaseSchemaManager:
             db = self._get_db()
             schema = self.get_schema_definition()
 
-            # Create schema metadata document
-            schema_ref = db.collection("_schema").document("markets")
-            schema_ref.set(
+            # Deploy markets collection
+            markets_schema_ref = db.collection("_schema").document("markets")
+            markets_schema_ref.set(
                 {
                     "version": "1.0.0",
                     "created_at": firestore.SERVER_TIMESTAMP,
@@ -208,10 +208,10 @@ class FirebaseSchemaManager:
                 }
             )
 
-            # Create a sample document to ensure collection exists
+            # Create a sample document to ensure markets collection exists
             markets_ref = db.collection("markets")
-            sample_doc = markets_ref.document("_schema_init")
-            sample_doc.set(
+            markets_sample = markets_ref.document("_schema_init")
+            markets_sample.set(
                 {
                     "ticker": "_schema_init",
                     "event_ticker": "SYSTEM",
@@ -224,10 +224,33 @@ class FirebaseSchemaManager:
                     "data_hash": "schema_init",
                 }
             )
+            markets_sample.delete()
 
-            # Clean up sample document
-            sample_doc.delete()
+            # Deploy engine_events collection
+            events_schema_ref = db.collection("_schema").document("engine_events")
+            events_schema_ref.set(
+                {
+                    "version": "1.0.0",
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                    "definition": schema["collections"]["engine_events"],
+                }
+            )
 
+            # Create a sample document to ensure engine_events collection exists
+            events_ref = db.collection("engine_events")
+            events_sample = events_ref.document("_schema_init")
+            events_sample.set(
+                {
+                    "event_id": "_schema_init",
+                    "timestamp": firestore.SERVER_TIMESTAMP,
+                    "event_name": "schema_initialization",
+                    "event_metadata": {},
+                }
+            )
+            events_sample.delete()
+
+            print("Schema deployment successful")
             return True
 
         except Exception as e:

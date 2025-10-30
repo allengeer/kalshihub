@@ -34,6 +34,7 @@ class TestFirebaseSchemaManager:
 
         assert "collections" in schema
         assert "markets" in schema["collections"]
+        assert "engine_events" in schema["collections"]
 
         markets_schema = schema["collections"]["markets"]
         assert "fields" in markets_schema
@@ -41,6 +42,12 @@ class TestFirebaseSchemaManager:
         assert markets_schema["fields"]["ticker"]["type"] == "string"
         assert markets_schema["fields"]["ticker"]["required"] is True
         assert markets_schema["fields"]["ticker"]["indexed"] is True
+
+        events_schema = schema["collections"]["engine_events"]
+        assert "fields" in events_schema
+        assert "event_id" in events_schema["fields"]
+        assert events_schema["fields"]["event_id"]["type"] == "string"
+        assert events_schema["fields"]["event_id"]["required"] is True
 
     def test_deploy_schema_success(self, schema_manager):
         """Test successful schema deployment."""
@@ -53,10 +60,18 @@ class TestFirebaseSchemaManager:
         result = schema_manager.deploy_schema()
 
         assert result is True
-        # Should be called for both _schema and markets collections
-        assert schema_manager._db.collection.call_count >= 2
-        # Check that set was called (for both schema and init document)
-        assert mock_doc.set.call_count >= 2
+        # Should be called for _schema (2x for markets and engine_events),
+        # markets collection, and engine_events collection = 4 collections
+        assert schema_manager._db.collection.call_count >= 4
+        # Check that set was called for:
+        # - markets schema doc
+        # - markets init doc
+        # - engine_events schema doc
+        # - engine_events init doc
+        # Total: 4 set calls
+        assert mock_doc.set.call_count >= 4
+        # Check that delete was called to clean up init docs (2x)
+        assert mock_doc.delete.call_count >= 2
 
     def test_deploy_schema_failure(self, schema_manager):
         """Test schema deployment failure."""
