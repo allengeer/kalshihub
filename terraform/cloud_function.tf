@@ -129,7 +129,7 @@ resource "google_cloud_scheduler_job" "market_crawl_schedule" {
   time_zone   = "UTC"
 
   pubsub_target {
-    topic_name = google_pubsub_topic.market_crawl.name
+    topic_name = google_pubsub_topic.market_crawl.id
     # Request 1-day horizon via delta minutes (1440)
     data = base64encode(jsonencode({
       max_close_delta_minutes = "1440"
