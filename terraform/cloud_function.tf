@@ -86,3 +86,58 @@ resource "google_cloudfunctions2_function_iam_member" "market_crawler_invoker" {
   role           = "roles/cloudfunctions.invoker"
   member         = "serviceAccount:${var.service_account_email}"
 }
+
+# Pub/Sub topic for crawl events
+resource "google_pubsub_topic" "market_crawl" {
+  name = "market-crawl"
+  labels = {
+    environment = var.environment
+    application = "kalshihub"
+  }
+}
+
+# Allow the service account to publish to the topic (for Cloud Scheduler)
+resource "google_pubsub_topic_iam_member" "market_crawl_publisher" {
+  topic  = google_pubsub_topic.market_crawl.name
+  role   = "roles/pubsub.publisher"
+  member = "serviceAccount:${var.service_account_email}"
+}
+
+# Push subscription that delivers messages to the HTTP function
+resource "google_pubsub_subscription" "market_crawl_push" {
+  name  = "market-crawl-push"
+  topic = google_pubsub_topic.market_crawl.name
+
+  push_config {
+    push_endpoint = google_cloudfunctions2_function.market_crawler.service_config[0].uri
+    oidc_token {
+      service_account_email = var.service_account_email
+    }
+  }
+
+  labels = {
+    environment = var.environment
+    application = "kalshihub"
+  }
+}
+
+# Cloud Scheduler job that publishes a crawl event every 15 minutes
+resource "google_cloud_scheduler_job" "market_crawl_schedule" {
+  name        = "market-crawl-every-15m"
+  description = "Publish crawl event to Pub/Sub every 15 minutes"
+  schedule    = "*/15 * * * *"
+  time_zone   = "UTC"
+
+  pubsub_target {
+    topic_name = google_pubsub_topic.market_crawl.name
+    # Request 1-day horizon via delta minutes (1440)
+    data = base64encode(jsonencode({
+      max_close_delta_minutes = "1440"
+    }))
+  }
+
+  labels = {
+    environment = var.environment
+    application = "kalshihub"
+  }
+}

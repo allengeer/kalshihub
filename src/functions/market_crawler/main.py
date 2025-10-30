@@ -29,9 +29,42 @@ def crawl_markets(request: Request) -> tuple[str, int]:
     start_time = datetime.now()
     print(f"[{start_time}] Market crawler function invoked")
 
-    # Parse request parameters
+    # Parse request parameters (supports direct HTTP and Pub/Sub push)
     request_json = request.get_json(silent=True)
     request_args = request.args
+
+    # Handle Pub/Sub push envelope if present
+    # Pub/Sub push sends a JSON with 'message' containing base64 'data'
+    # and optional 'attributes'
+    if request_json and isinstance(request_json, dict) and "message" in request_json:
+        try:
+            message = request_json.get("message", {}) or {}
+            attributes = message.get("attributes", {}) or {}
+
+            # Extract delta from attributes if provided
+            if "max_close_delta_minutes" in attributes:
+                request_args = {
+                    "max_close_delta_minutes": attributes.get("max_close_delta_minutes")
+                }
+
+            # Decode data payload if JSON
+            data_b64 = message.get("data")
+            if data_b64:
+                import base64
+                import json as _json
+
+                decoded = base64.b64decode(data_b64).decode("utf-8")
+                try:
+                    decoded_json = _json.loads(decoded)
+                    if isinstance(decoded_json, dict):
+                        # Merge decoded JSON into request_json
+                        request_json.update(decoded_json)
+                except Exception:
+                    # Not JSON; ignore
+                    pass
+        except Exception:
+            # Fail-open to allow default behavior
+            pass
 
     # Get max_close_ts or compute via delta from request (optional)
     max_close_ts = None
