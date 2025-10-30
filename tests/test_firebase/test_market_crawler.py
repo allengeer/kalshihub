@@ -1,8 +1,7 @@
 """Tests for Market Crawler."""
 
-import os
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -19,7 +18,6 @@ class TestMarketCrawler:
         return MarketCrawler(
             firebase_project_id="test-project",
             firebase_credentials_path="test-credentials.json",
-            interval_minutes=30,
             max_retries=3,
             retry_delay_seconds=1,
         )
@@ -82,10 +80,10 @@ class TestMarketCrawler:
         """Test crawler initialization."""
         assert crawler.firebase_project_id == "test-project"
         assert crawler.firebase_credentials_path == "test-credentials.json"
-        assert crawler.interval_minutes == 30
+        # interval scheduling removed in single-run mode
         assert crawler.max_retries == 3
         assert crawler.retry_delay_seconds == 1
-        assert crawler.is_running is False
+        # runner state removed in single-run mode
 
     @pytest.mark.asyncio
     async def test_initialize_services(self, crawler):
@@ -185,40 +183,6 @@ class TestMarketCrawler:
         assert result == 0
         assert crawler.market_dao.batch_create_markets.call_count == 3  # max_retries
 
-    def test_start_crawler(self, crawler):
-        """Test starting the crawler."""
-        with patch.object(crawler.scheduler, "start") as mock_start:
-            crawler.start()
-            mock_start.assert_called_once()
-
-    def test_start_crawler_already_running(self, crawler):
-        """Test starting crawler when already running."""
-        with patch.object(crawler.scheduler, "start") as mock_start:
-            crawler.start()
-            # Should not raise an error
-            mock_start.assert_called_once()
-
-    def test_stop_crawler(self, crawler):
-        """Test stopping the crawler."""
-        with patch.object(crawler.scheduler, "shutdown") as mock_shutdown, patch.object(
-            type(crawler.scheduler),
-            "running",
-            new_callable=lambda: PropertyMock(return_value=True),
-        ):
-            crawler.stop()
-            mock_shutdown.assert_called_once_with(wait=True)
-
-    def test_stop_crawler_not_running(self, crawler):
-        """Test stopping crawler when not running."""
-        with patch.object(crawler.scheduler, "shutdown") as mock_shutdown, patch.object(
-            type(crawler.scheduler),
-            "running",
-            new_callable=lambda: PropertyMock(return_value=False),
-        ):
-            crawler.stop()
-            # Should not call shutdown if not running
-            mock_shutdown.assert_not_called()
-
     @pytest.mark.asyncio
     async def test_run_once_success(self, crawler, sample_markets):
         """Test running a single crawl cycle."""
@@ -245,154 +209,17 @@ class TestMarketCrawler:
         mock_kalshi.__aexit__ = AsyncMock()
         mock_dao = MagicMock()
         mock_dao.close = MagicMock()
+        mock_event_dao = MagicMock()
+        mock_event_dao.close = MagicMock()
 
         crawler.kalshi_service = mock_kalshi
         crawler.market_dao = mock_dao
+        crawler.engine_event_dao = mock_event_dao
 
-        with patch.object(crawler, "stop") as mock_stop:
-            await crawler.close()
+        await crawler.close()
 
-            mock_stop.assert_called_once()
-            mock_kalshi.__aexit__.assert_called_once_with(None, None, None)
-            mock_dao.close.assert_called_once()
+        mock_kalshi.__aexit__.assert_called_once_with(None, None, None)
+        mock_dao.close.assert_called_once()
+        mock_event_dao.close.assert_called_once()
 
-    def test_get_status(self, crawler):
-        """Test getting crawler status."""
-        # Set the is_running flag and mock scheduler.running
-        crawler.is_running = True
-        with patch.object(
-            type(crawler.scheduler),
-            "running",
-            new_callable=lambda: PropertyMock(return_value=True),
-        ):
-            status = crawler.get_status()
-
-            assert status["is_running"] is True
-            assert status["scheduler_running"] is True
-            assert status["interval_minutes"] == 30
-            assert status["firebase_project"] == "test-project"
-
-    @pytest.mark.asyncio
-    async def test_main_function_success(self):
-        """Test the main function with successful execution."""
-        with patch.dict(
-            os.environ,
-            {
-                "FIREBASE_PROJECT_ID": "test-project",
-                "FIREBASE_CREDENTIALS_PATH": "test-credentials.json",
-                "CRAWLER_INTERVAL_MINUTES": "15",
-                "CRAWLER_MAX_RETRIES": "5",
-                "CRAWLER_RETRY_DELAY_SECONDS": "2",
-            },
-        ), patch("src.job.market_crawler.MarketCrawler") as mock_crawler_class:
-            # Mock the crawler instance
-            mock_crawler = MagicMock()
-            mock_crawler.run_once = AsyncMock(return_value=True)
-            mock_crawler.get_status.return_value = {"is_running": False}
-            mock_crawler.close = AsyncMock()
-            mock_crawler_class.return_value = mock_crawler
-
-            # Import and run main
-            from src.job.market_crawler import main
-
-            await main()
-
-            # Verify crawler was created with correct parameters
-            mock_crawler_class.assert_called_once_with(
-                firebase_project_id="test-project",
-                firebase_credentials_path="test-credentials.json",
-                interval_minutes=15,
-                max_retries=5,
-                retry_delay_seconds=2,
-            )
-
-            # Verify methods were called
-            mock_crawler.run_once.assert_called_once()
-            mock_crawler.get_status.assert_called_once()
-            mock_crawler.close.assert_called_once()
-
-    @pytest.mark.asyncio
-    async def test_main_function_missing_project_id(self):
-        """Test the main function with missing FIREBASE_PROJECT_ID."""
-        with patch.dict(os.environ, {}, clear=True), patch(
-            "builtins.print"
-        ) as mock_print:
-            from src.job.market_crawler import main
-
-            await main()
-
-            mock_print.assert_called_with(
-                "Error: FIREBASE_PROJECT_ID environment variable is required"
-            )
-
-    @pytest.mark.asyncio
-    async def test_main_function_crawler_failure(self):
-        """Test the main function when crawler fails."""
-        with patch.dict(
-            os.environ,
-            {
-                "FIREBASE_PROJECT_ID": "test-project",
-                "FIREBASE_CREDENTIALS_PATH": "test-credentials.json",
-            },
-        ), patch("src.job.market_crawler.MarketCrawler") as mock_crawler_class, patch(
-            "builtins.print"
-        ) as mock_print:
-            # Mock the crawler instance
-            mock_crawler = MagicMock()
-            mock_crawler.run_once = AsyncMock(return_value=False)
-            mock_crawler.get_status.return_value = {"is_running": False}
-            mock_crawler.close = AsyncMock()
-            mock_crawler_class.return_value = mock_crawler
-
-            from src.job.market_crawler import main
-
-            await main()
-
-            # Verify failure message was printed
-            mock_print.assert_any_call("✗ Crawler failed")
-
-    @pytest.mark.asyncio
-    async def test_main_function_keyboard_interrupt(self):
-        """Test the main function handling KeyboardInterrupt."""
-        with patch.dict(
-            os.environ,
-            {
-                "FIREBASE_PROJECT_ID": "test-project",
-                "FIREBASE_CREDENTIALS_PATH": "test-credentials.json",
-            },
-        ), patch("src.job.market_crawler.MarketCrawler") as mock_crawler_class, patch(
-            "builtins.print"
-        ) as mock_print:
-            # Mock the crawler instance
-            mock_crawler = MagicMock()
-            mock_crawler.run_once = AsyncMock(side_effect=KeyboardInterrupt())
-            mock_crawler.close = AsyncMock()
-            mock_crawler_class.return_value = mock_crawler
-
-            from src.job.market_crawler import main
-
-            await main()
-
-            # Verify KeyboardInterrupt was handled
-            mock_print.assert_any_call("\nShutting down crawler...")
-            mock_crawler.close.assert_called_once()
-
-    def test_module_execution(self):
-        """Test the module execution when run as main."""
-        # Import the module and simulate the if __name__ == "__main__" block
-        import src.job.market_crawler
-
-        # Manually execute the if __name__ == "__main__" block
-        # This tests the structure without actually running asyncio.run
-        if src.job.market_crawler.__name__ == "__main__":
-            # This would normally call asyncio.run(main())
-            # We're just testing that the structure exists
-            pass
-
-        # For coverage purposes, we'll test that the if block exists
-        # by checking the source code contains the expected structure
-        import inspect
-
-        source = inspect.getsource(src.job.market_crawler)
-        assert 'if __name__ == "__main__":' in source
-        assert "asyncio.run(main())" in source
+    # Single-run design has no module-level main entrypoint; those tests removed

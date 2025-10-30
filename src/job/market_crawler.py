@@ -1,13 +1,9 @@
 """Market Crawler job for automated market data refresh."""
 
 import asyncio
-import os
 import sys
 from datetime import datetime
 from typing import List, Optional
-
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.interval import IntervalTrigger
 
 # Import from firebase module
 try:
@@ -25,7 +21,7 @@ except ImportError:
 
 
 class MarketCrawler:
-    """Automated job to refresh market data at regular intervals using BulkWriter."""
+    """Market data crawler that runs once per invocation."""
 
     def __init__(
         self,
@@ -33,7 +29,6 @@ class MarketCrawler:
         firebase_credentials_path: Optional[str] = None,
         kalshi_base_url: str = "https://api.elections.kalshi.com/trade-api/v2",
         kalshi_rate_limit: float = 20.0,
-        interval_minutes: int = 30,
         max_retries: int = 3,
         retry_delay_seconds: int = 1,
     ):
@@ -44,7 +39,6 @@ class MarketCrawler:
             firebase_credentials_path: Path to Firebase service account credentials
             kalshi_base_url: Kalshi API base URL
             kalshi_rate_limit: Kalshi API rate limit (requests per second)
-            interval_minutes: Crawl interval in minutes
             max_retries: Maximum number of retries for failed operations
             retry_delay_seconds: Initial delay between retries (exponential backoff)
         """
@@ -52,15 +46,12 @@ class MarketCrawler:
         self.firebase_credentials_path = firebase_credentials_path
         self.kalshi_base_url = kalshi_base_url
         self.kalshi_rate_limit = kalshi_rate_limit
-        self.interval_minutes = interval_minutes
         self.max_retries = max_retries
         self.retry_delay_seconds = retry_delay_seconds
 
-        self.scheduler = AsyncIOScheduler()
         self.kalshi_service: Optional[KalshiAPIService] = None
         self.market_dao: Optional[MarketDAO] = None
         self.engine_event_dao: Optional[EngineEventDAO] = None
-        self.is_running = False
 
     async def _initialize_services(self):
         """Initialize Kalshi API service and Market DAO."""
@@ -251,47 +242,8 @@ class MarketCrawler:
 
         return 0
 
-    async def _crawl_job(self):
-        """Scheduled job to crawl markets."""
-        if self.is_running:
-            print(
-                f"[{datetime.now()}] Previous crawl still running, skipping this cycle"
-            )
-            sys.stdout.flush()
-            return
-
-        self.is_running = True
-        try:
-            await self._crawl_markets()
-        finally:
-            self.is_running = False
-
-    def start(self):
-        """Start the market crawler scheduler."""
-        if not self.scheduler.running:
-            self.scheduler.add_job(
-                self._crawl_job,
-                trigger=IntervalTrigger(minutes=self.interval_minutes),
-                id="market_crawl",
-                name="Market Data Crawl",
-                replace_existing=True,
-            )
-            self.scheduler.start()
-            print(
-                f"[{datetime.now()}] Market crawler started with "
-                f"{self.interval_minutes} minute interval"
-            )
-            sys.stdout.flush()
-
-    def stop(self):
-        """Stop the market crawler scheduler."""
-        if self.scheduler.running:
-            self.scheduler.shutdown(wait=True)
-            print(f"[{datetime.now()}] Market crawler stopped")
-            sys.stdout.flush()
-
     async def run_once(self) -> bool:
-        """Run the market crawler once without scheduling.
+        """Run the market crawler once.
 
         Returns:
             True if successful, False otherwise
@@ -301,68 +253,9 @@ class MarketCrawler:
 
     async def close(self):
         """Close all resources."""
-        self.stop()
         if self.market_dao:
             self.market_dao.close()
         if self.engine_event_dao:
             self.engine_event_dao.close()
         if self.kalshi_service:
             await self.kalshi_service.__aexit__(None, None, None)
-
-    def get_status(self) -> dict:
-        """Get crawler status information.
-
-        Returns:
-            Dictionary containing crawler status
-        """
-        return {
-            "is_running": self.is_running,
-            "scheduler_running": self.scheduler.running,
-            "interval_minutes": self.interval_minutes,
-            "firebase_project": self.firebase_project_id,
-        }
-
-
-async def main():
-    """Main function for testing the crawler."""
-    # Load configuration from environment variables
-    firebase_project_id = os.getenv("FIREBASE_PROJECT_ID")
-    firebase_credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH")
-    interval_minutes = int(os.getenv("CRAWLER_INTERVAL_MINUTES", "30"))
-    max_retries = int(os.getenv("CRAWLER_MAX_RETRIES", "3"))
-    retry_delay_seconds = int(os.getenv("CRAWLER_RETRY_DELAY_SECONDS", "1"))
-
-    if not firebase_project_id:
-        print("Error: FIREBASE_PROJECT_ID environment variable is required")
-        return
-
-    # Create crawler
-    crawler = MarketCrawler(
-        firebase_project_id=firebase_project_id,
-        firebase_credentials_path=firebase_credentials_path,
-        interval_minutes=interval_minutes,
-        max_retries=max_retries,
-        retry_delay_seconds=retry_delay_seconds,
-    )
-
-    try:
-        # Run once for testing
-        print("Running market crawler once...")
-        success = await crawler.run_once()
-        if success:
-            print("✓ Crawler completed successfully")
-        else:
-            print("✗ Crawler failed")
-
-        # Show status
-        status = crawler.get_status()
-        print(f"Crawler status: {status}")
-
-    except KeyboardInterrupt:
-        print("\nShutting down crawler...")
-    finally:
-        await crawler.close()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
