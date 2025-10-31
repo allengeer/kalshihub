@@ -8,9 +8,11 @@ from typing import List, Optional
 # Import from firebase module
 try:
     from src.firebase.engine_event_dao import EngineEventDAO
+    from src.firebase.event_publisher import EventPublisher
     from src.firebase.market_dao import MarketDAO
 except ImportError:
     from firebase.engine_event_dao import EngineEventDAO  # type: ignore[no-redef]
+    from firebase.event_publisher import EventPublisher  # type: ignore[no-redef]
     from firebase.market_dao import MarketDAO  # type: ignore[no-redef]
 
 # Import Kalshi service - handle both direct and relative imports
@@ -52,6 +54,7 @@ class MarketCrawler:
         self.kalshi_service: Optional[KalshiAPIService] = None
         self.market_dao: Optional[MarketDAO] = None
         self.engine_event_dao: Optional[EngineEventDAO] = None
+        self.event_publisher: Optional[EventPublisher] = None
 
     async def _initialize_services(self):
         """Initialize Kalshi API service and Market DAO."""
@@ -73,17 +76,38 @@ class MarketCrawler:
                 credentials_path=self.firebase_credentials_path,
             )
 
+        if not self.event_publisher:
+            self.event_publisher = EventPublisher(project_id=self.firebase_project_id)
+
     async def _crawl_markets(self) -> bool:
         """Crawl and update market data using BulkWriter.
 
         Returns:
             True if crawl was successful, False otherwise
         """
+        correlation_id = None
         try:
             await self._initialize_services()
 
+            # Generate correlation ID for this crawl operation
+            import uuid
+
+            correlation_id = str(uuid.uuid4())
+
             print(f"[{datetime.now()}] Starting market crawl...")
             sys.stdout.flush()
+
+            # Publish crawler.started event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.started",
+                        metadata={"operation": "full_crawl"},
+                        correlation_id=correlation_id,
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to publish crawler.started event: {e}")
+                    sys.stdout.flush()
 
             # Get all open markets from Kalshi API
             if not self.kalshi_service:
@@ -209,11 +233,51 @@ class MarketCrawler:
                 f"{len(markets)} markets processed successfully"
             )
             sys.stdout.flush()
+
+            # Publish crawler.completed event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.completed",
+                        metadata={
+                            "operation": "full_crawl",
+                            "total_markets": len(markets),
+                            "success_count": success_count,
+                        },
+                        correlation_id=correlation_id,
+                    )
+                except Exception as pub_error:
+                    print(
+                        f"Warning: Failed to publish crawler.completed "
+                        f"event: {pub_error}"
+                    )
+                    sys.stdout.flush()
+
             return success_count > 0
 
         except Exception as e:
             print(f"[{datetime.now()}] Crawl failed: {e}")
             sys.stdout.flush()
+
+            # Publish crawler.failed event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.failed",
+                        metadata={
+                            "operation": "full_crawl",
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        },
+                        correlation_id=correlation_id,
+                    )
+                except Exception as pub_error:
+                    print(
+                        f"Warning: Failed to publish crawler.failed event: "
+                        f"{pub_error}"
+                    )
+                    sys.stdout.flush()
+
             return False
 
     async def _crawl_markets_with_filtering(self, max_close_ts: int) -> bool:
@@ -225,14 +289,35 @@ class MarketCrawler:
         Returns:
             True if crawl was successful, False otherwise
         """
+        correlation_id = None
         try:
             await self._initialize_services()
+
+            # Generate correlation ID for this crawl operation
+            import uuid
+
+            correlation_id = str(uuid.uuid4())
 
             print(
                 f"[{datetime.now()}] Starting market crawl with filtering "
                 f"(max close time: {datetime.fromtimestamp(max_close_ts)})..."
             )
             sys.stdout.flush()
+
+            # Publish crawler.started event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.started",
+                        metadata={
+                            "operation": "filtered_crawl",
+                            "max_close_ts": max_close_ts,
+                        },
+                        correlation_id=correlation_id,
+                    )
+                except Exception as e:
+                    print(f"Warning: Failed to publish crawler.started event: {e}")
+                    sys.stdout.flush()
 
             # Get filtered open markets from Kalshi API
             if not self.kalshi_service:
@@ -361,11 +446,53 @@ class MarketCrawler:
                 f"{len(markets)} markets processed successfully"
             )
             sys.stdout.flush()
+
+            # Publish crawler.completed event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.completed",
+                        metadata={
+                            "operation": "filtered_crawl",
+                            "max_close_ts": max_close_ts,
+                            "total_markets": len(markets),
+                            "success_count": success_count,
+                        },
+                        correlation_id=correlation_id,
+                    )
+                except Exception as pub_error:
+                    print(
+                        f"Warning: Failed to publish crawler.completed "
+                        f"event: {pub_error}"
+                    )
+                    sys.stdout.flush()
+
             return success_count > 0
 
         except Exception as e:
             print(f"[{datetime.now()}] Filtered crawl failed: {e}")
             sys.stdout.flush()
+
+            # Publish crawler.failed event
+            if self.event_publisher:
+                try:
+                    self.event_publisher.publish_crawler_event(
+                        event_type="crawler.failed",
+                        metadata={
+                            "operation": "filtered_crawl",
+                            "max_close_ts": max_close_ts,
+                            "error": str(e),
+                            "error_type": type(e).__name__,
+                        },
+                        correlation_id=correlation_id,
+                    )
+                except Exception as pub_error:
+                    print(
+                        f"Warning: Failed to publish crawler.failed event: "
+                        f"{pub_error}"
+                    )
+                    sys.stdout.flush()
+
             return False
 
     async def _upsert_markets(self, markets: List[Market]) -> int:

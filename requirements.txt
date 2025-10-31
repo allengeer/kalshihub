@@ -52,6 +52,9 @@ rich>=13.0.0
 firebase-admin>=6.2.0
 google-cloud-firestore>=2.11.0
 
+# Google Cloud Pub/Sub
+google-cloud-pubsub>=2.18.0
+
 # Scheduling
 APScheduler>=3.10.0
 APScheduler==3.11.0
