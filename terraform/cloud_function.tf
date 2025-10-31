@@ -23,7 +23,7 @@ data "archive_file" "market_crawler_function" {
   dynamic "source" {
     for_each = fileset("${path.module}/../src", "**/*.py")
     content {
-      content  = file("${path.module}/../src/${source.value}")
+      content = file("${path.module}/../src/${source.value}")
       # Don't duplicate main.py from functions/market_crawler
       filename = source.value == "functions/market_crawler/main.py" ? ".ignore" : source.value
     }
@@ -63,10 +63,10 @@ resource "google_cloudfunctions2_function" "market_crawler" {
     service_account_email = var.service_account_email
 
     environment_variables = {
-      FIREBASE_PROJECT_ID        = var.project_id
-      KALSHI_BASE_URL            = "https://api.elections.kalshi.com/trade-api/v2"
-      KALSHI_RATE_LIMIT          = "20.0"
-      CRAWLER_MAX_RETRIES        = "3"
+      FIREBASE_PROJECT_ID         = var.project_id
+      KALSHI_BASE_URL             = "https://api.elections.kalshi.com/trade-api/v2"
+      KALSHI_RATE_LIMIT           = "20.0"
+      CRAWLER_MAX_RETRIES         = "3"
       CRAWLER_RETRY_DELAY_SECONDS = "1"
     }
   }
@@ -105,8 +105,8 @@ resource "google_pubsub_topic_iam_member" "market_crawl_publisher" {
 
 # Push subscription that delivers messages to the HTTP function
 resource "google_pubsub_subscription" "market_crawl_push" {
-  name  = "market-crawl-push"
-  topic = google_pubsub_topic.market_crawl.name
+  name                 = "market-crawl-push"
+  topic                = google_pubsub_topic.market_crawl.name
   ack_deadline_seconds = 600
 
   push_config {
@@ -136,5 +136,86 @@ resource "google_cloud_scheduler_job" "market_crawl_schedule" {
     data = base64encode(jsonencode({
       max_close_delta_minutes = "1440"
     }))
+  }
+}
+
+# Google Cloud Function for market event processor
+# This function is triggered by Firestore document writes and publishes Pub/Sub events
+
+# Archive the function code
+data "archive_file" "market_event_processor_function" {
+  type        = "zip"
+  output_path = "${path.module}/market_event_processor_function.zip"
+
+  # Include requirements.txt at root
+  source {
+    content  = file("${path.module}/../src/functions/market_event_processor/requirements.txt")
+    filename = "requirements.txt"
+  }
+
+  # Include main.py at root
+  source {
+    content  = file("${path.module}/../src/functions/market_event_processor/main.py")
+    filename = "main.py"
+  }
+
+  # Include all Python files from src/ (except the functions dir itself)
+  dynamic "source" {
+    for_each = fileset("${path.module}/../src", "**/*.py")
+    content {
+      content = file("${path.module}/../src/${source.value}")
+      # Don't duplicate main.py from functions/market_event_processor
+      filename = source.value == "functions/market_event_processor/main.py" ? ".ignore" : source.value
+    }
+  }
+}
+
+# Upload function source to storage bucket
+resource "google_storage_bucket_object" "market_event_processor_function" {
+  name   = "functions/market_event_processor-${data.archive_file.market_event_processor_function.output_md5}.zip"
+  bucket = google_storage_bucket.kalshihub_data.name
+  source = data.archive_file.market_event_processor_function.output_path
+}
+
+# Cloud Function resource with Firestore trigger
+resource "google_cloudfunctions2_function" "market_event_processor" {
+  name        = "market-event-processor"
+  location    = var.region
+  description = "Processes Firestore market document changes and publishes Pub/Sub events"
+
+  build_config {
+    runtime     = "python313"
+    entry_point = "process_market_event"
+    source {
+      storage_source {
+        bucket = google_storage_bucket.kalshihub_data.name
+        object = google_storage_bucket_object.market_event_processor_function.name
+      }
+    }
+  }
+
+  service_config {
+    max_instance_count    = 10
+    min_instance_count    = 0
+    available_memory      = "512Mi"
+    available_cpu         = "1"
+    timeout_seconds       = 60
+    service_account_email = var.service_account_email
+
+    environment_variables = {
+      FIREBASE_PROJECT_ID = var.project_id
+    }
+  }
+
+  event_trigger {
+    event_type            = "google.cloud.firestore.document.v1.written"
+    resource              = "projects/${var.project_id}/databases/(default)/documents/markets/{document}"
+    service_account_email = var.service_account_email
+  }
+
+  labels = {
+    environment = var.environment
+    managed_by  = "terraform"
+    application = "kalshihub"
   }
 }

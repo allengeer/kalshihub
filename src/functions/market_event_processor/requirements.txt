@@ -1,0 +1,12 @@
+# Google Cloud Functions Framework
+functions-framework==3.*
+
+# Firebase
+firebase-admin>=6.2.0
+google-cloud-firestore>=2.11.0
+
+# Google Cloud Pub/Sub
+google-cloud-pubsub>=2.18.0
+
+# Google Events for Firestore
+google-events>=0.1.0
