@@ -7,3 +7,6 @@ google-cloud-firestore>=2.11.0
 
 # Google Cloud Pub/Sub
 google-cloud-pubsub>=2.18.0
+
+# Data validation (required by engine_event.py)
+pydantic>=2.0.0
