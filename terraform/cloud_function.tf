@@ -213,11 +213,6 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
     retry_policy   = "RETRY_POLICY_RETRY"
 
     event_filters {
-      attribute = "database"
-      value     = "(default)"
-    }
-
-    event_filters {
       attribute = "document"
       value     = "markets/{ticker}"
       operator  = "match-path-pattern"
