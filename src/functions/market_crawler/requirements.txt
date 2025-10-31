@@ -9,6 +9,9 @@ python-dotenv>=1.0.0
 firebase-admin>=6.2.0
 google-cloud-firestore>=2.11.0
 
+# Google Cloud Pub/Sub
+google-cloud-pubsub>=2.18.0
+
 # Scheduling (not used in Cloud Function but required by market_crawler.py)
 APScheduler==3.11.0
 
