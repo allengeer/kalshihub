@@ -208,7 +208,7 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
   }
 
   event_trigger {
-    trigger_region = var.region
+    trigger_region = "nam5"
     event_type     = "google.cloud.firestore.document.v1.written"
     retry_policy   = "RETRY_POLICY_RETRY"
 
