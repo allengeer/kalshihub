@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.job import MarketCrawler
-from src.kalshi.service import Market
+from src.kalshi.service import Market, MarketsResponse
 
 
 class TestMarketCrawler:
@@ -124,10 +124,15 @@ class TestMarketCrawler:
         crawler.kalshi_service.getAllOpenMarkets = AsyncMock(
             return_value=sample_markets
         )
+        # Mock get_markets to return MarketsResponse
+        mock_response = MarketsResponse(cursor="", markets=sample_markets)
+        crawler.kalshi_service.get_markets = AsyncMock(return_value=mock_response)
 
         with patch.object(crawler, "_upsert_markets", return_value=5) as mock_upsert:
             await crawler._crawl_markets()
             assert mock_upsert.call_count == 2
+            # Verify get_markets was called with batched tickers
+            crawler.kalshi_service.get_markets.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_crawl_markets_with_filtering_refresh_stale(
@@ -144,10 +149,15 @@ class TestMarketCrawler:
         crawler.kalshi_service.getAllOpenMarkets = AsyncMock(
             return_value=sample_markets
         )
+        # Mock get_markets to return MarketsResponse
+        mock_response = MarketsResponse(cursor="", markets=sample_markets)
+        crawler.kalshi_service.get_markets = AsyncMock(return_value=mock_response)
 
         with patch.object(crawler, "_upsert_markets", return_value=5) as mock_upsert:
             await crawler._crawl_markets_with_filtering(max_close_ts=1234567890)
             assert mock_upsert.call_count == 2
+            # Verify get_markets was called with batched tickers
+            crawler.kalshi_service.get_markets.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_crawl_markets_no_markets(self, crawler):

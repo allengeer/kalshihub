@@ -138,21 +138,44 @@ class MarketCrawler:
                             except Exception as e:
                                 print(f"[{datetime.now()}] Event log failed: {e}")
                                 sys.stdout.flush()
-                        tickers_param = ",".join(stale_tickers)
-                        # Use a separate name to keep lines short
+                        # Batch tickers to avoid URL length limits
+                        batch_size = 100
+                        all_refresh_markets = []
                         async with self.kalshi_service as svc:  # type: ignore
-                            refresh_markets = await svc.get_markets(
-                                tickers=tickers_param
-                            )
+                            for i in range(0, len(stale_tickers), batch_size):
+                                batch = stale_tickers[i : i + batch_size]
+                                tickers_param = ",".join(batch)
+                                total_batches = (
+                                    len(stale_tickers) + batch_size - 1
+                                ) // batch_size
+                                batch_num = i // batch_size + 1
+                                print(
+                                    f"[{datetime.now()}] Fetching stale markets batch "
+                                    f"{batch_num}/{total_batches} "
+                                    f"({len(batch)} tickers)..."
+                                )
+                                sys.stdout.flush()
+                                try:
+                                    batch_response = await svc.get_markets(
+                                        tickers=tickers_param
+                                    )
+                                    all_refresh_markets.extend(batch_response.markets)
+                                except Exception as batch_error:
+                                    print(
+                                        f"[{datetime.now()}] Batch fetch failed: "
+                                        f"{batch_error}"
+                                    )
+                                    sys.stdout.flush()
                         # Upsert refreshed markets
-                        await self._upsert_markets(refresh_markets)
+                        if all_refresh_markets:
+                            await self._upsert_markets(all_refresh_markets)
                         # Log refresh completion
                         if self.engine_event_dao:
                             try:
                                 self.engine_event_dao.create_event(
                                     event_name="stale_markets_refreshed",
                                     event_metadata={
-                                        "refreshed": len(refresh_markets),
+                                        "refreshed": len(all_refresh_markets),
                                     },
                                 )
                             except Exception as e:
@@ -250,21 +273,44 @@ class MarketCrawler:
                             except Exception as e:
                                 print(f"[{datetime.now()}] Event log failed: {e}")
                                 sys.stdout.flush()
-                        tickers_param = ",".join(stale_tickers)
-                        # Use a separate name to keep lines short
+                        # Batch tickers to avoid URL length limits
+                        batch_size = 100
+                        all_refresh_markets = []
                         async with self.kalshi_service as svc:  # type: ignore
-                            refresh_markets = await svc.get_markets(
-                                tickers=tickers_param
-                            )
+                            for i in range(0, len(stale_tickers), batch_size):
+                                batch = stale_tickers[i : i + batch_size]
+                                tickers_param = ",".join(batch)
+                                total_batches = (
+                                    len(stale_tickers) + batch_size - 1
+                                ) // batch_size
+                                batch_num = i // batch_size + 1
+                                print(
+                                    f"[{datetime.now()}] Fetching stale markets batch "
+                                    f"{batch_num}/{total_batches} "
+                                    f"({len(batch)} tickers)..."
+                                )
+                                sys.stdout.flush()
+                                try:
+                                    batch_response = await svc.get_markets(
+                                        tickers=tickers_param
+                                    )
+                                    all_refresh_markets.extend(batch_response.markets)
+                                except Exception as batch_error:
+                                    print(
+                                        f"[{datetime.now()}] Batch fetch failed: "
+                                        f"{batch_error}"
+                                    )
+                                    sys.stdout.flush()
                         # Upsert refreshed markets
-                        await self._upsert_markets(refresh_markets)
+                        if all_refresh_markets:
+                            await self._upsert_markets(all_refresh_markets)
                         # Log refresh completion
                         if self.engine_event_dao:
                             try:
                                 self.engine_event_dao.create_event(
                                     event_name="stale_markets_refreshed",
                                     event_metadata={
-                                        "refreshed": len(refresh_markets),
+                                        "refreshed": len(all_refresh_markets),
                                     },
                                 )
                             except Exception as e:
