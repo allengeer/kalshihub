@@ -221,6 +221,31 @@ class EventPublisher:
             correlation_id=correlation_id,
         )
 
+    def publish_trading_event(
+        self,
+        event_type: str,
+        metadata: Dict[str, Any],
+        correlation_id: Optional[str] = None,
+    ) -> str:
+        """Convenience method to publish a trading event.
+
+        Args:
+            event_type: Trading event type
+                (e.g., "order.placed", "position.opened", "risk.limit_breached")
+            metadata: Event metadata
+            correlation_id: Optional correlation ID
+
+        Returns:
+            Message ID from Pub/Sub
+        """
+        return self.publish_event(
+            topic_name="trading-events",
+            event_type=event_type,
+            source="execution-engine",
+            metadata=metadata,
+            correlation_id=correlation_id,
+        )
+
     def close(self):
         """Close publisher connection."""
         if self._publisher:

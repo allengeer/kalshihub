@@ -97,6 +97,37 @@ class TestEventPublisher:
         published_data = json.loads(call_args[0][1].decode("utf-8"))
         assert published_data["correlation_id"] == "corr-123"
 
+    @patch("src.firebase.event_publisher.pubsub_v1.PublisherClient")
+    def test_publish_trading_event(self, mock_publisher_client, publisher):
+        """Test convenience method for trading events."""
+        mock_client = MagicMock()
+        mock_publisher_client.return_value = mock_client
+        mock_future = MagicMock()
+        mock_future.result.return_value = "message-id-trading"
+        mock_client.topic_path.return_value = (
+            "projects/test-project/topics/trading-events"
+        )
+        mock_client.publish.return_value = mock_future
+
+        message_id = publisher.publish_trading_event(
+            event_type="order.placed",
+            metadata={"order_id": "order-123", "ticker": "TEST-2024"},
+            correlation_id="corr-456",
+        )
+
+        assert message_id == "message-id-trading"
+        mock_client.publish.assert_called_once()
+        call_args = mock_client.publish.call_args
+        assert call_args[0][0] == "projects/test-project/topics/trading-events"
+        published_data = json.loads(call_args[0][1].decode("utf-8"))
+        assert published_data["event_type"] == "order.placed"
+        assert published_data["source"] == "execution-engine"
+        assert published_data["correlation_id"] == "corr-456"
+        assert published_data["metadata"] == {
+            "order_id": "order-123",
+            "ticker": "TEST-2024",
+        }
+
     def test_close(self, publisher):
         """Test closing the publisher."""
         mock_publisher = MagicMock()

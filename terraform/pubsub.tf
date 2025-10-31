@@ -59,3 +59,23 @@ resource "google_pubsub_topic_iam_member" "system_events_publisher" {
   role    = "roles/pubsub.publisher"
   member  = "serviceAccount:${var.service_account_email}"
 }
+
+# Trading events topic
+resource "google_pubsub_topic" "trading_events" {
+  project = var.project_id
+  name    = "trading-events"
+
+  labels = {
+    environment = var.environment
+    application = "kalshihub"
+    domain       = "trading"
+  }
+}
+
+# Allow service account to publish to trading-events
+resource "google_pubsub_topic_iam_member" "trading_events_publisher" {
+  project = var.project_id
+  topic   = google_pubsub_topic.trading_events.name
+  role    = "roles/pubsub.publisher"
+  member  = "serviceAccount:${var.service_account_email}"
+}
