@@ -149,20 +149,37 @@ class MarketCrawler:
                                     len(stale_tickers) + batch_size - 1
                                 ) // batch_size
                                 batch_num = i // batch_size + 1
+                                # Log batch parameters
+                                if len(batch) <= 5:
+                                    ticker_preview = ",".join(batch[:5])
+                                else:
+                                    ticker_preview = (
+                                        ",".join(batch[:5])
+                                        + f"... ({len(batch) - 5} more)"
+                                    )
                                 print(
                                     f"[{datetime.now()}] Fetching stale markets batch "
                                     f"{batch_num}/{total_batches} "
-                                    f"({len(batch)} tickers)..."
+                                    f"({len(batch)} tickers): {ticker_preview}"
                                 )
                                 sys.stdout.flush()
                                 try:
                                     batch_response = await svc.get_markets(
                                         tickers=tickers_param
                                     )
+                                    returned_count = len(batch_response.markets)
                                     all_refresh_markets.extend(batch_response.markets)
+                                    now_str = f"[{datetime.now()}]"
+                                    print(
+                                        f"{now_str} Batch {batch_num} completed: "
+                                        f"{returned_count} returned "
+                                        f"(queried {len(batch)} tickers)"
+                                    )
+                                    sys.stdout.flush()
                                 except Exception as batch_error:
                                     print(
-                                        f"[{datetime.now()}] Batch fetch failed: "
+                                        f"[{datetime.now()}] Batch {batch_num} failed "
+                                        f"({len(batch)} tickers): "
                                         f"{batch_error}"
                                     )
                                     sys.stdout.flush()
@@ -284,20 +301,37 @@ class MarketCrawler:
                                     len(stale_tickers) + batch_size - 1
                                 ) // batch_size
                                 batch_num = i // batch_size + 1
+                                # Log batch parameters
+                                if len(batch) <= 5:
+                                    ticker_preview = ",".join(batch[:5])
+                                else:
+                                    ticker_preview = (
+                                        ",".join(batch[:5])
+                                        + f"... ({len(batch) - 5} more)"
+                                    )
                                 print(
                                     f"[{datetime.now()}] Fetching stale markets batch "
                                     f"{batch_num}/{total_batches} "
-                                    f"({len(batch)} tickers)..."
+                                    f"({len(batch)} tickers): {ticker_preview}"
                                 )
                                 sys.stdout.flush()
                                 try:
                                     batch_response = await svc.get_markets(
                                         tickers=tickers_param
                                     )
+                                    returned_count = len(batch_response.markets)
                                     all_refresh_markets.extend(batch_response.markets)
+                                    now_str = f"[{datetime.now()}]"
+                                    print(
+                                        f"{now_str} Batch {batch_num} completed: "
+                                        f"{returned_count} returned "
+                                        f"(queried {len(batch)} tickers)"
+                                    )
+                                    sys.stdout.flush()
                                 except Exception as batch_error:
                                     print(
-                                        f"[{datetime.now()}] Batch fetch failed: "
+                                        f"[{datetime.now()}] Batch {batch_num} failed "
+                                        f"({len(batch)} tickers): "
                                         f"{batch_error}"
                                     )
                                     sys.stdout.flush()
