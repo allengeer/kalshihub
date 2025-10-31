@@ -209,7 +209,7 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
 
   event_trigger {
     event_type            = "google.cloud.firestore.document.v1.written"
-    resource              = "projects/${var.project_id}/databases/(default)/documents/markets/{document}"
+    resource              = "projects/${var.project_id}/databases/(default)/documents/markets/{document=**}"
     service_account_email = var.service_account_email
   }
 
