@@ -45,7 +45,7 @@ jobs:
 
     - name: Type check with mypy
       run: |
-        mypy src/ --ignore-missing-imports
+        mypy src/ --config-file mypy.ini
 
     - name: Check code formatting with black
       run: |
