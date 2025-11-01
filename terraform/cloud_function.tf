@@ -172,7 +172,7 @@ data "archive_file" "market_event_processor_function" {
 
 # Upload function source to storage bucket
 resource "google_storage_bucket_object" "market_event_processor_function" {
-  name   = "functions/market_event_processor-${data.archive_file.market_event_processor_function.output_md5}.zip"
+  name   = "functions/market_event_processor-${data.archive_file.market_event_processor_function.output_sha256}.zip"
   bucket = google_storage_bucket.kalshihub_data.name
   source = data.archive_file.market_event_processor_function.output_path
 }
