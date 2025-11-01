@@ -4,11 +4,13 @@ This function is triggered when documents are written to Firestore and
 publishes appropriate Pub/Sub events based on the change type and document data.
 """
 
-import json
 import os
 from typing import Any, Dict, Optional
 
 import functions_framework
+from cloudevents.http import CloudEvent
+from firestoredata.types import MutableMapping, Value
+from google.events.cloud import firestore as firestoredata
 
 # Import event publisher - handle both direct and relative imports
 try:
@@ -18,7 +20,7 @@ except ImportError:
 
 
 @functions_framework.cloud_event
-def process_market_event(cloud_event: Any) -> None:
+def process_market_event(cloud_event: CloudEvent) -> None:
     """Process Firestore document change and publish appropriate events.
 
     This function is triggered by Firestore document writes and publishes
@@ -33,32 +35,21 @@ def process_market_event(cloud_event: Any) -> None:
         return
 
     try:
-        # Parse the Firestore event data from CloudEvent
-        # CloudEvent.data contains the Firestore document event payload
-        if isinstance(cloud_event.data, str):
-            event_data_dict = json.loads(cloud_event.data)
-        elif isinstance(cloud_event.data, dict):
-            event_data_dict = cloud_event.data
-        else:
-            event_data_dict = json.loads(str(cloud_event.data))
-
+        firestore_payload = firestoredata.DocumentEventData()
+        firestore_payload._pb.ParseFromString(cloud_event.data)
         # Extract document information
         # The event data structure: {"value": {...}, "oldValue": {...}}
-        value_dict = event_data_dict.get("value") or event_data_dict.get("data")
-        old_value_dict = event_data_dict.get("oldValue") or event_data_dict.get(
-            "old_data"
+        value = firestore_payload.value.fields
+        old_value = firestore_payload.old_value.fields
+
+        # Extract document name/path from the DocumentSnapshot, not from fields
+        document_name = (
+            firestore_payload.value.name if firestore_payload.value.name else ""
         )
-
-        if not value_dict:
-            print("No document value in event data")
-            return
-
-        # Extract document name/path
-        document_name = value_dict.get("name", "")
         if not document_name:
-            # Try alternative path
-            if hasattr(cloud_event, "get"):
-                document_name = cloud_event.get("source", "")
+            # Try alternative path from cloud_event source
+            if hasattr(cloud_event, "source"):
+                document_name = cloud_event.source or ""
             else:
                 document_name = ""
 
@@ -73,18 +64,16 @@ def process_market_event(cloud_event: Any) -> None:
         event_publisher = EventPublisher(project_id=firebase_project_id)
 
         # Determine change type
-        change_type = _determine_change_type_from_dict(old_value_dict, value_dict)
+        change_type = _determine_change_type_from_dict(old_value, value)
 
         # Extract ticker from document name (it's the document ID)
         ticker = _extract_document_id(document_name)
 
         # Process based on change type
         if change_type == "CREATE":
-            _publish_market_created_from_dict(value_dict, ticker, event_publisher)
+            _publish_market_created_from_dict(value, ticker, event_publisher)
         elif change_type == "UPDATE":
-            _publish_market_updated_from_dict(
-                old_value_dict, value_dict, ticker, event_publisher
-            )
+            _publish_market_updated_from_dict(old_value, value, ticker, event_publisher)
         elif change_type == "DELETE":
             # Markets are typically not deleted, but handle it if needed
             print(f"Market deleted: {ticker}")
@@ -157,22 +146,22 @@ def _extract_document_id(document_path: str) -> str:
 
 
 def _determine_change_type_from_dict(
-    old_value_dict: Optional[Dict[str, Any]], new_value_dict: Dict[str, Any]
+    old_value: MutableMapping[str, Value], new_value: MutableMapping[str, Value]
 ) -> str:
     """Determine the type of Firestore document change.
 
     Args:
-        old_value_dict: Previous document state (None for CREATE)
-        new_value_dict: New document state (None for DELETE)
+        old_value: Previous document state (None for CREATE)
+        new_value: New document state (None for DELETE)
 
     Returns:
         Change type: "CREATE", "UPDATE", or "DELETE"
     """
-    if old_value_dict is None and new_value_dict is not None:
+    if old_value is None and new_value is not None:
         return "CREATE"
-    elif old_value_dict is not None and new_value_dict is None:
+    elif old_value is not None and new_value is None:
         return "DELETE"
-    elif old_value_dict is not None and new_value_dict is not None:
+    elif old_value is not None and new_value is not None:
         return "UPDATE"
     else:
         # This shouldn't happen, but default to UPDATE
@@ -180,7 +169,7 @@ def _determine_change_type_from_dict(
 
 
 def _publish_market_created_from_dict(
-    document_dict: Dict[str, Any], ticker: str, event_publisher: EventPublisher
+    fields: MutableMapping[str, Value], ticker: str, event_publisher: EventPublisher
 ) -> None:
     """Publish market.created event when a new market document is created.
 
@@ -189,13 +178,6 @@ def _publish_market_created_from_dict(
         ticker: Market ticker (document ID)
         event_publisher: EventPublisher instance
     """
-    # Extract fields from document dict
-    # The structure is: {"name": "...", "fields": {...}, "createTime": "..."}
-    fields = document_dict.get("fields", {})
-    if not fields:
-        # If fields not nested, assume document_dict IS the fields
-        fields = document_dict
-
     metadata = {
         "ticker": ticker,
         "event_ticker": _get_field_value(fields, "event_ticker"),
@@ -223,8 +205,8 @@ def _publish_market_created_from_dict(
 
 
 def _publish_market_updated_from_dict(
-    old_document_dict: Optional[Dict[str, Any]],
-    new_document_dict: Dict[str, Any],
+    old_fields: MutableMapping[str, Value],
+    new_fields: MutableMapping[str, Value],
     ticker: str,
     event_publisher: EventPublisher,
 ) -> None:
@@ -233,23 +215,11 @@ def _publish_market_updated_from_dict(
     Also publishes market.closed or market.settled if status/result changed.
 
     Args:
-        old_document_dict: Previous document state
-        new_document_dict: New document state
+        old_fields: Previous document state
+        new_fields: New document state
         ticker: Market ticker
         event_publisher: EventPublisher instance
     """
-    old_fields = (
-        old_document_dict.get("fields", {})
-        if old_document_dict and isinstance(old_document_dict, dict)
-        else (old_document_dict if old_document_dict else {})
-    )
-    new_fields = (
-        new_document_dict.get("fields", {})
-        if isinstance(new_document_dict, dict)
-        else new_document_dict
-    )
-
-    # Determine what changed
     changes = {}
     status_changed = False
 
@@ -337,7 +307,7 @@ def _publish_market_updated_from_dict(
             print(f"ERROR publishing market.settled event: {e}")
 
 
-def _get_field_value(fields: Dict[str, Any], field_name: str) -> Any:
+def _get_field_value(fields: MutableMapping[str, Value], field_name: str) -> Any:
     """Extract field value from Firestore document fields dict.
 
     Firestore fields can be structured as:

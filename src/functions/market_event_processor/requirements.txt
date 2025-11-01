@@ -3,8 +3,10 @@ functions-framework==3.*
 
 # Firebase
 firebase-admin>=6.2.0
+firebase-functions>=1.0.0
 google-cloud-firestore>=2.11.0
-
+cloudevents>=1.0.0
+google-events>=0.14.0
 # Google Cloud Pub/Sub
 google-cloud-pubsub>=2.18.0
 

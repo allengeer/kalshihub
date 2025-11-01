@@ -210,7 +210,8 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
   event_trigger {
     trigger_region = "nam5"
     event_type     = "google.cloud.firestore.document.v1.written"
-    retry_policy   = "RETRY_POLICY_RETRY"
+    service_account_email = var.service_account_email
+    retry_policy   = "RETRY_POLICY_DO_NOT_RETRY"
 
     event_filters {
       attribute = "document"
