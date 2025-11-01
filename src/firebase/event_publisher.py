@@ -57,7 +57,7 @@ class EventPublisher:
             "timestamp": datetime.now().isoformat(),
             "source": source,
             "version": self.EVENT_VERSION,
-            "metadata": metadata or {},
+            "metadata": dict((k, str(v)) for k, v in (metadata or {}).iteritems()),
             "correlation_id": correlation_id,
         }
 
