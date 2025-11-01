@@ -201,16 +201,18 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
     available_cpu         = "1"
     timeout_seconds       = 60
     service_account_email = var.service_account_email
-
+    all_traffic_on_latest_revision   = true
+    ingress_settings                    = "ALLOW_ALL"
     environment_variables = {
-      FIREBASE_PROJECT_ID = var.project_id
+      FIREBASE_PROJECT_ID = var.project_id,
+      FUNCTION_SIGNATURE_TYPE = "cloudevent"
     }
   }
 
   event_trigger {
-    trigger_region = "nam5"
+    trigger_region = nam5
     event_type     = "google.cloud.firestore.document.v1.written"
-
+    service_account_email = var.service_account_email
     event_filters {
       attribute = "database"
       value     = "(default)"
@@ -219,6 +221,7 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
     event_filters {
       attribute = "document"
       value     = "markets/{ticker}"
+      operator = "match-path-pattern"
     }
   }
 

@@ -9,7 +9,8 @@ from typing import Any, Dict, Optional
 
 import functions_framework
 from cloudevents.http import CloudEvent
-from firestoredata.types import MutableMapping, Value
+from google.cloud.firestore_v1.types import Value
+from google.cloud.firestore_v1.types.document import MutableMapping
 from google.events.cloud import firestore as firestoredata
 
 # Import event publisher - handle both direct and relative imports
