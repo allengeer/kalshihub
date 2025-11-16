@@ -529,7 +529,9 @@ async def _fetch_orderbook_and_update_market(
             orderbook = orderbook_response.orderbook
 
             # Update market scores with orderbook data
-            updated_scores = market.update_score_with_orderbook(orderbook)
+            updated_scores = market.update_score_with_orderbook(
+                orderbook_response.orderbook
+            )
 
             # Update market object with new scores
             # Note: We can't directly set properties on Market dataclass,
