@@ -83,7 +83,7 @@ class Market:
     # Maker potential parameters
     P_MAX = 15  # Maximum spread for parity slack calculation
     LIQUIDITY_CAP = 500.0  # Cap for liquidity normalization (in dollars)
-    TAU_UPD = 300  # Time constant for stability (seconds, 5 minutes)
+    TAU_UPD = 5.0  # Time constant for stability (seconds, 5 minutes)
 
     # Maker potential exponents
     MAKER_ALPHA = 1.0  # Exponent for parity slack (α≈1)
@@ -94,9 +94,9 @@ class Market:
     W_MAKER = 0.4  # Weight for maker potential in raw score
 
     # Orderbook-based scoring parameters
-    K_LIQ = 1000.0  # Soft cap for liquidity depth calculations
-    K_LIQ_SUM = 2000.0  # Soft cap for total depth (yes + no)
-    DELTA = 1.5  # Scale for micro_tilt normalization (δ≈1–2¢)
+    K_LIQ = 500.0  # Soft cap for liquidity depth calculations
+    K_LIQ_SUM = 1000.0  # Soft cap for total depth (yes + no)
+    DELTA = 1.0  # Scale for micro_tilt normalization (δ≈1–2¢)
 
     @property
     def mid(self) -> int:
