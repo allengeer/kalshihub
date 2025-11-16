@@ -335,6 +335,7 @@ def _get_field_value(fields: MutableMapping[str, Value], field_name: str) -> Any
     {"field_name": {"integerValue": 123}} or
     {"field_name": {"timestampValue": "..."}} or
     Or just plain {"field_name": value} if already parsed
+    Or as a protobuf Value object with snake_case attributes
 
     Args:
         fields: Firestore fields dictionary
@@ -348,26 +349,43 @@ def _get_field_value(fields: MutableMapping[str, Value], field_name: str) -> Any
 
     field_data = fields[field_name]
 
-    # If it's already a plain value, return it
-    if not isinstance(field_data, dict):
+    # If it's already a plain value (int, float, str, etc.), return it
+    if isinstance(field_data, (int, float, str, bool, type(None))):
         return field_data
 
-    # Handle Firestore value types
-    if "stringValue" in field_data:
-        return field_data["stringValue"]
-    elif "integerValue" in field_data:
-        return int(field_data["integerValue"])
-    elif "doubleValue" in field_data:
-        return float(field_data["doubleValue"])
-    elif "booleanValue" in field_data:
-        return field_data["booleanValue"]
-    elif "timestampValue" in field_data:
-        return field_data["timestampValue"]
-    elif "nullValue" in field_data:
+    # Handle protobuf Value object with snake_case attributes
+    if hasattr(field_data, "double_value"):
+        return float(field_data.double_value)
+    elif hasattr(field_data, "integer_value"):
+        return int(field_data.integer_value)
+    elif hasattr(field_data, "string_value"):
+        return field_data.string_value
+    elif hasattr(field_data, "boolean_value"):
+        return field_data.boolean_value
+    elif hasattr(field_data, "timestamp_value"):
+        return field_data.timestamp_value
+    elif hasattr(field_data, "null_value"):
         return None
-    else:
-        # Unknown type, try to return as-is
-        return field_data
+
+    # Handle dict-based Firestore value types (camelCase)
+    if isinstance(field_data, dict):
+        if "stringValue" in field_data:
+            return field_data["stringValue"]
+        elif "integerValue" in field_data:
+            return int(field_data["integerValue"])
+        elif "doubleValue" in field_data:
+            return float(field_data["doubleValue"])
+        elif "double_value" in field_data:  # Also check snake_case in dict
+            return float(field_data["double_value"])
+        elif "booleanValue" in field_data:
+            return field_data["booleanValue"]
+        elif "timestampValue" in field_data:
+            return field_data["timestampValue"]
+        elif "nullValue" in field_data:
+            return None
+
+    # Unknown type, try to return as-is or convert to string for debugging
+    return field_data
 
 
 def _format_firestore_timestamp(timestamp_value: Any) -> Optional[str]:
