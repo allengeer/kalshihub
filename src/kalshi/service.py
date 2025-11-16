@@ -233,7 +233,13 @@ class Market:
             * moneyness_score**self.GAMMA
         )
 
-        return float(taker_potential)
+        result = float(taker_potential)
+        print(
+            f"taker_potential (market data) for {self.ticker}: "
+            f"spread_score={spread_score:.4f}, activity_score={activity_score:.4f}, "
+            f"moneyness_score={moneyness_score:.4f}, result={result:.4f}"
+        )
+        return result
 
     @property
     def maker_potential(self) -> float:
@@ -293,7 +299,15 @@ class Market:
             * stability_score
         )
 
-        return float(maker_potential)
+        result = float(maker_potential)
+        print(
+            f"maker_potential (market data) for {self.ticker}: "
+            f"parity_slack={parity_slack:.4f}, "
+            f"liquidity_score={liquidity_score:.4f}, "
+            f"stability_score={stability_score:.4f}, "
+            f"stale_seconds={stale_seconds:.1f}, result={result:.4f}"
+        )
+        return result
 
     @property
     def time_to_close_weight(self) -> float:
@@ -404,6 +418,20 @@ class Market:
         # Calculate updated potentials
         taker_potential = S_spread_narrow * max(D_ask, D_bid) * S_micro_tilt
         maker_potential = S_spread_wide * D_total * S_obi_balance
+
+        max_depth = max(D_ask, D_bid)
+        print(
+            f"taker_potential (orderbook data) for {self.ticker}: "
+            f"S_spread_narrow={S_spread_narrow:.4f}, "
+            f"max(D_ask,D_bid)={max_depth:.4f}, "
+            f"S_micro_tilt={S_micro_tilt:.4f}, "
+            f"result={float(taker_potential):.4f}"
+        )
+        print(
+            f"maker_potential (orderbook data) for {self.ticker}: "
+            f"S_spread_wide={S_spread_wide:.4f}, D_total={D_total:.4f}, "
+            f"S_obi_balance={S_obi_balance:.4f}, result={float(maker_potential):.4f}"
+        )
 
         # Calculate raw score and enhanced score
         raw_score = self.W_TAKER * taker_potential + self.W_MAKER * maker_potential
