@@ -561,22 +561,41 @@ async def _fetch_orderbook_and_update_market(
 def _update_market_score_with_orderbook(ticker: str, firebase_project_id: str) -> None:
     """Synchronous wrapper to run async orderbook update.
 
-    This function runs the async orderbook fetch and update in a non-blocking way.
-    For Cloud Functions, we use asyncio.run() to execute the async function.
+    This function runs the async orderbook fetch and update, handling both
+    cases where an event loop may or may not already be running.
 
     Args:
         ticker: Market ticker
         firebase_project_id: Firebase project ID
     """
     import asyncio
+    import concurrent.futures
+
+    async def _run_async_task() -> None:
+        """Run the async orderbook update task."""
+        await _fetch_orderbook_and_update_market(ticker, firebase_project_id)
 
     try:
-        # In Cloud Functions context, we can use asyncio.run() to execute
-        # the async function. This will create a new event loop and run
-        # until completion. For non-blocking execution, we could use
-        # threading or a task queue, but for now we'll run it synchronously
-        # to ensure the update completes.
-        asyncio.run(_fetch_orderbook_and_update_market(ticker, firebase_project_id))
+        # Check if there's already a running event loop
+        try:
+            asyncio.get_running_loop()
+            # Event loop is already running - run in a separate thread with new loop
+            # This prevents "RuntimeError: This event loop is already running"
+
+            def run_in_new_loop() -> None:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    new_loop.run_until_complete(_run_async_task())
+                finally:
+                    new_loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_new_loop)
+                future.result()  # Wait for completion
+        except RuntimeError:
+            # No event loop is running - safe to use asyncio.run()
+            asyncio.run(_run_async_task())
     except Exception as e:
         print(f"ERROR running async orderbook update for {ticker}: {e}")
         import traceback
