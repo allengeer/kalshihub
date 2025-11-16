@@ -120,10 +120,10 @@ class OrderbookDAO:
             "obi": obi,
             "micro": micro,
             "micro_tilt": micro_tilt,
-            # Score properties
-            "score": score,
-            "taker_potential": taker_potential,
-            "maker_potential": maker_potential,
+            # Score properties - explicitly convert to float for Firebase double type
+            "score": float(score),
+            "taker_potential": float(taker_potential),
+            "maker_potential": float(maker_potential),
             # Timestamps
             "created_at": now,
             "updated_at": now,
