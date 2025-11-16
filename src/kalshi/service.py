@@ -93,6 +93,11 @@ class Market:
     W_TAKER = 0.6  # Weight for taker potential in raw score
     W_MAKER = 0.4  # Weight for maker potential in raw score
 
+    # Orderbook-based scoring parameters
+    K_LIQ = 1000.0  # Soft cap for liquidity depth calculations
+    K_LIQ_SUM = 2000.0  # Soft cap for total depth (yes + no)
+    DELTA = 1.5  # Scale for micro_tilt normalization (δ≈1–2¢)
+
     @property
     def mid(self) -> int:
         """Calculate the midpoint of yes bid and ask prices."""
@@ -347,6 +352,70 @@ class Market:
 
         return float(score)
 
+    def update_score_with_orderbook(self, orderbook: "Orderbook") -> Dict[str, float]:
+        """Update score and potentials using orderbook data.
+
+        Recalculates taker_potential, maker_potential, raw_score, and score
+        using orderbook depth and spread information.
+
+        Args:
+            orderbook: Orderbook object with depth and spread data
+
+        Returns:
+            Dictionary with updated score values:
+            - taker_potential: Updated taker potential
+            - maker_potential: Updated maker potential
+            - raw_score: Updated raw score
+            - score_enhanced: Enhanced score (raw_score * time_to_close_weight)
+        """
+        # Calculate depth metrics with softcap
+        depth_ask = orderbook.depth_ask_withinK()
+        depth_bid = orderbook.depth_bid_withinK()
+        depth_total = orderbook.depth_yes_topN() + orderbook.depth_no_topN()
+
+        # Softcap normalization: x / (x + k)
+        D_ask = depth_ask / (depth_ask + self.K_LIQ)
+        D_bid = depth_bid / (depth_bid + self.K_LIQ)
+        D_total = depth_total / (depth_total + self.K_LIQ_SUM)
+
+        # Calculate spread scores
+        spread = orderbook.spread
+        if spread is None:
+            # Missing spread data indicates incomplete orderbook - penalize scores
+            # rather than treating missing data as perfect spread (spread=0)
+            S_spread_narrow = 0.0
+            S_spread_wide = 0.0
+        else:
+            S_spread_narrow = max(0.0, min(1.0, 1 - (spread / self.S_MAX)))
+            S_spread_wide = max(0.0, min(1.0, spread / self.P_MAX))
+
+        # Calculate OBI balance score
+        obi = orderbook.obi
+        if obi is None:
+            obi = 0.0
+        S_obi_balance = 1 - abs(obi)
+
+        # Calculate micro tilt score
+        micro_tilt = orderbook.micro_tilt
+        if micro_tilt is None:
+            micro_tilt = 0.0
+        S_micro_tilt = max(0.0, min(1.0, 0.5 + micro_tilt / (2 * self.DELTA)))
+
+        # Calculate updated potentials
+        taker_potential = S_spread_narrow * max(D_ask, D_bid) * S_micro_tilt
+        maker_potential = S_spread_wide * D_total * S_obi_balance
+
+        # Calculate raw score and enhanced score
+        raw_score = self.W_TAKER * taker_potential + self.W_MAKER * maker_potential
+        score_enhanced = raw_score * self.time_to_close_weight
+
+        return {
+            "taker_potential": float(taker_potential),
+            "maker_potential": float(maker_potential),
+            "raw_score": float(raw_score),
+            "score_enhanced": float(score_enhanced),
+        }
+
 
 @dataclass
 class MarketsResponse:
@@ -354,6 +423,310 @@ class MarketsResponse:
 
     cursor: str
     markets: List[Market]
+
+
+@dataclass
+class OrderbookLevel:
+    """Represents a single price level in the orderbook.
+
+    Attributes:
+        price: Price in cents
+        count: Number of contracts at this price level
+    """
+
+    price: int
+    count: int
+
+
+@dataclass
+class Orderbook:
+    """Represents the orderbook for a market.
+
+    Attributes:
+        yes: List of yes bid price levels [price_cents, count]
+        no: List of no bid price levels [price_cents, count]
+        yes_dollars: List of yes bid price levels in dollars [dollars_string, count]
+        no_dollars: List of no bid price levels in dollars [dollars_string, count]
+    """
+
+    yes: List[OrderbookLevel]
+    no: List[OrderbookLevel]
+    yes_dollars: List[tuple[str, int]]
+    no_dollars: List[tuple[str, int]]
+
+    # Configuration constants for depth calculations
+    K_DEPTH = 5  # Default K for within-K depth calculations
+    N_TOP = 5  # Default N for top-N depth calculations
+
+    @property
+    def best_yes_bid(self) -> Optional[int]:
+        """Get the best (highest) yes bid price in cents.
+
+        Returns:
+            Best yes bid price in cents, or None if no yes bids exist.
+        """
+        if not self.yes:
+            return None
+        # Yes bids are ordered from best (highest) to worst (lowest)
+        return self.yes[0].price
+
+    @property
+    def best_yes_bid_qty(self) -> Optional[int]:
+        """Get the quantity of the best yes bid.
+
+        Returns:
+            Quantity of best yes bid, or None if no yes bids exist.
+        """
+        if not self.yes:
+            return None
+        return self.yes[0].count
+
+    @property
+    def best_no_bid(self) -> Optional[int]:
+        """Get the best (highest) no bid price in cents.
+
+        Returns:
+            Best no bid price in cents, or None if no no bids exist.
+        """
+        if not self.no:
+            return None
+        # No bids are ordered from best (highest) to worst (lowest)
+        return self.no[0].price
+
+    @property
+    def best_no_bid_qty(self) -> Optional[int]:
+        """Get the quantity of the best no bid.
+
+        Returns:
+            Quantity of best no bid, or None if no no bids exist.
+        """
+        if not self.no:
+            return None
+        return self.no[0].count
+
+    @property
+    def yes_ask_l1(self) -> Optional[int]:
+        """Get the yes ask at level 1 (best ask) in cents.
+
+        In binary markets, a yes ask at price X is equivalent to a no bid
+        at price (100 - X). So the best yes ask = 100 - best_no_bid.
+
+        Returns:
+            Yes ask L1 price in cents, or None if no no bids exist.
+        """
+        best_no_bid = self.best_no_bid
+        if best_no_bid is None:
+            return None
+        # Best yes ask = 100 - best no bid
+        return 100 - best_no_bid
+
+    @property
+    def yes_ask_l1_qty(self) -> Optional[int]:
+        """Get the quantity of the yes ask at level 1.
+
+        In binary markets, the yes ask quantity equals the no bid quantity
+        at the equivalent price level.
+
+        Returns:
+            Quantity of yes ask L1, or None if no no bids exist.
+        """
+        if not self.no:
+            return None
+        return self.best_no_bid_qty
+
+    @property
+    def spread(self) -> Optional[int]:
+        """Calculate the spread between yes ask L1 and best yes bid.
+
+        Returns:
+            Spread in cents (yes_ask_l1 - best_yes_bid), or None if
+            either value is unavailable.
+        """
+        yes_ask = self.yes_ask_l1
+        yes_bid = self.best_yes_bid
+        if yes_ask is None or yes_bid is None:
+            return None
+        return yes_ask - yes_bid
+
+    @property
+    def mid(self) -> Optional[int]:
+        """Calculate the midpoint between yes ask L1 and best yes bid.
+
+        Returns:
+            Mid price in cents ((yes_ask_l1 + best_yes_bid) / 2), or None
+            if either value is unavailable.
+        """
+        yes_ask = self.yes_ask_l1
+        yes_bid = self.best_yes_bid
+        if yes_ask is None or yes_bid is None:
+            return None
+        return (yes_ask + yes_bid) // 2
+
+    def depth_ask_withinK(self, K: Optional[int] = None) -> int:
+        """Calculate ask depth within K price levels.
+
+        Sum of quantities for no bids where price >= best_no_bid - (K-1).
+
+        Args:
+            K: Number of price levels (default: K_DEPTH)
+
+        Returns:
+            Total quantity of asks within K levels, 0 if no no bids exist.
+        """
+        if K is None:
+            K = self.K_DEPTH
+        if not self.no:
+            return 0
+        best_no = self.best_no_bid
+        if best_no is None:
+            return 0
+        threshold = best_no - (K - 1)
+        return sum(level.count for level in self.no if level.price >= threshold)
+
+    def depth_bid_withinK(self, K: Optional[int] = None) -> int:
+        """Calculate bid depth within K price levels.
+
+        Sum of quantities for yes bids where price >= best_yes_bid - (K-1).
+
+        Args:
+            K: Number of price levels (default: K_DEPTH)
+
+        Returns:
+            Total quantity of bids within K levels, 0 if no yes bids exist.
+        """
+        if K is None:
+            K = self.K_DEPTH
+        if not self.yes:
+            return 0
+        best_yes = self.best_yes_bid
+        if best_yes is None:
+            return 0
+        threshold = best_yes - (K - 1)
+        return sum(level.count for level in self.yes if level.price >= threshold)
+
+    def depth_yes_topN(self, N: Optional[int] = None) -> int:
+        """Calculate depth of top N yes bids.
+
+        Sum of quantities for the last N yes bids (worst prices).
+
+        Args:
+            N: Number of top levels to include (default: N_TOP)
+
+        Returns:
+            Total quantity of top N yes bids.
+        """
+        if N is None:
+            N = self.N_TOP
+        if not self.yes:
+            return 0
+        # Get last N levels (worst prices)
+        top_levels = self.yes[-N:] if len(self.yes) > N else self.yes
+        return sum(level.count for level in top_levels)
+
+    def depth_no_topN(self, N: Optional[int] = None) -> int:
+        """Calculate depth of top N no bids.
+
+        Sum of quantities for the last N no bids (worst prices).
+
+        Args:
+            N: Number of top levels to include (default: N_TOP)
+
+        Returns:
+            Total quantity of top N no bids.
+        """
+        if N is None:
+            N = self.N_TOP
+        if not self.no:
+            return 0
+        # Get last N levels (worst prices)
+        top_levels = self.no[-N:] if len(self.no) > N else self.no
+        return sum(level.count for level in top_levels)
+
+    @property
+    def bid_depth(self) -> int:
+        """Calculate YES-side bid depth.
+
+        Returns:
+            depth_yes_topN (sum of quantities for top N yes bids).
+        """
+        return self.depth_yes_topN()
+
+    @property
+    def ask_depth(self) -> int:
+        """Calculate YES-side ask depth via NO bids.
+
+        Returns:
+            depth_ask_withinK (sum of quantities for no bids within K levels).
+        """
+        return self.depth_ask_withinK()
+
+    @property
+    def obi(self) -> Optional[float]:
+        """Calculate orderbook imbalance (OBI).
+
+        Formula: (bid_depth - ask_depth) / max(1, (bid_depth + ask_depth))
+
+        Returns:
+            Orderbook imbalance between -1.0 and 1.0, or None if depths unavailable.
+            Positive values indicate bid pressure, negative indicate ask pressure.
+        """
+        bid = self.bid_depth
+        ask = self.ask_depth
+        total = bid + ask
+        if total == 0:
+            return None
+        return (bid - ask) / max(1, total)
+
+    @property
+    def micro(self) -> Optional[float]:
+        """Calculate micro price (weighted average of L1 ask and best bid).
+
+        Formula:
+            (yes_ask_L1 * qty_yes_L1 + best_yes_bid * qty_yes_bid)
+            / max(1, (qty_yes_L1 + qty_yes_bid))
+
+        Returns:
+            Micro price in cents, or None if values unavailable.
+        """
+        yes_ask = self.yes_ask_l1
+        yes_bid = self.best_yes_bid
+        qty_yes_l1 = self.yes_ask_l1_qty
+        qty_yes_bid = self.best_yes_bid_qty
+        if (
+            yes_ask is None
+            or yes_bid is None
+            or qty_yes_l1 is None
+            or qty_yes_bid is None
+        ):
+            return None
+        total_qty = qty_yes_l1 + qty_yes_bid
+        if total_qty == 0:
+            return None
+        numerator = yes_ask * qty_yes_l1 + yes_bid * qty_yes_bid
+        return numerator / max(1, total_qty)
+
+    @property
+    def micro_tilt(self) -> Optional[float]:
+        """Calculate micro tilt (pressure indicator).
+
+        Formula: micro - mid
+
+        Returns:
+            Micro tilt in cents. >0 indicates upward pressure,
+            <0 indicates downward pressure. None if micro or mid unavailable.
+        """
+        micro_price = self.micro
+        mid_price = self.mid
+        if micro_price is None or mid_price is None:
+            return None
+        return micro_price - float(mid_price)
+
+
+@dataclass
+class GetMarketOrderbookResponse:
+    """Response from the get_market_orderbook API endpoint."""
+
+    orderbook: Orderbook
 
 
 class KalshiAPIService:
@@ -568,6 +941,82 @@ class KalshiAPIService:
 
         except httpx.HTTPError as e:
             raise httpx.HTTPError(f"Failed to fetch markets: {e}") from e
+        except KeyError as e:
+            raise ValueError(f"Invalid response format: missing {e}") from e
+        except Exception as e:
+            raise RuntimeError(f"Unexpected error: {e}") from e
+
+    async def get_market_orderbook(
+        self, ticker: str, depth: int = 3
+    ) -> GetMarketOrderbookResponse:
+        """Get the orderbook for a specific market.
+
+        Args:
+            ticker: Market ticker
+            depth: Depth of the orderbook to retrieve (0 or negative means all
+                   levels, 1-100 for specific depth). Default is 3.
+
+        Returns:
+            GetMarketOrderbookResponse containing the orderbook
+
+        Raises:
+            httpx.HTTPError: If the API request fails
+            ValueError: If invalid parameters are provided
+        """
+        # Validate parameters
+        if depth > 100:
+            raise ValueError("depth must be <= 100 (0 or negative means all levels)")
+
+        # Build query parameters
+        params: Dict[str, Any] = {}
+        if depth > 0:
+            params["depth"] = depth
+
+        # Apply rate limiting
+        await self._rate_limit_call()
+
+        # Make API request
+        client = self._get_client()
+        url = f"{self.base_url}/markets/{ticker}/orderbook"
+
+        try:
+            response = await client.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            # Parse orderbook
+            orderbook_data = data["orderbook"]
+
+            # Parse yes and no levels (arrays of [price, count])
+            yes_levels = [
+                OrderbookLevel(price=int(level[0]), count=int(level[1]))
+                for level in orderbook_data["yes"]
+            ]
+            no_levels = [
+                OrderbookLevel(price=int(level[0]), count=int(level[1]))
+                for level in orderbook_data["no"]
+            ]
+
+            # Parse yes_dollars and no_dollars (arrays of [dollars_string, count])
+            yes_dollars_levels = [
+                (str(level[0]), int(level[1]))
+                for level in orderbook_data["yes_dollars"]
+            ]
+            no_dollars_levels = [
+                (str(level[0]), int(level[1])) for level in orderbook_data["no_dollars"]
+            ]
+
+            orderbook = Orderbook(
+                yes=yes_levels,
+                no=no_levels,
+                yes_dollars=yes_dollars_levels,
+                no_dollars=no_dollars_levels,
+            )
+
+            return GetMarketOrderbookResponse(orderbook=orderbook)
+
+        except httpx.HTTPError as e:
+            raise httpx.HTTPError(f"Failed to fetch orderbook for {ticker}: {e}") from e
         except KeyError as e:
             raise ValueError(f"Invalid response format: missing {e}") from e
         except Exception as e:

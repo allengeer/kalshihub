@@ -195,23 +195,25 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
   }
 
   service_config {
-    max_instance_count    = 10
-    min_instance_count    = 0
-    available_memory      = "512Mi"
-    available_cpu         = "1"
-    timeout_seconds       = 60
-    service_account_email = var.service_account_email
-    all_traffic_on_latest_revision   = true
-    ingress_settings                    = "ALLOW_ALL"
+    max_instance_count             = 10
+    min_instance_count             = 0
+    available_memory               = "512Mi"
+    available_cpu                  = "1"
+    timeout_seconds                = 120 # Increased to allow time for orderbook API calls
+    service_account_email          = var.service_account_email
+    all_traffic_on_latest_revision = true
+    ingress_settings               = "ALLOW_ALL"
     environment_variables = {
-      FIREBASE_PROJECT_ID = var.project_id,
+      FIREBASE_PROJECT_ID     = var.project_id
       FUNCTION_SIGNATURE_TYPE = "cloudevent"
+      # Optional: Add Kalshi API credentials if needed
+      # KALSHI_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
     }
   }
 
   event_trigger {
-    trigger_region = "nam5"
-    event_type     = "google.cloud.firestore.document.v1.written"
+    trigger_region        = "nam5"
+    event_type            = "google.cloud.firestore.document.v1.written"
     service_account_email = var.service_account_email
     event_filters {
       attribute = "database"
@@ -221,7 +223,7 @@ resource "google_cloudfunctions2_function" "market_event_processor" {
     event_filters {
       attribute = "document"
       value     = "markets/{ticker}"
-      operator = "match-path-pattern"
+      operator  = "match-path-pattern"
     }
   }
 

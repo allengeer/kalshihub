@@ -184,6 +184,8 @@ class MarketDAO:
             "crawled_at": now,
             "data_hash": data_hash,
             "score": market.score,  # Calculate and store score for querying/sorting
+            "taker_potential": market.taker_potential,  # Store taker potential
+            "maker_potential": market.maker_potential,  # Store maker potential
         }
 
     def create_market(self, market: Market) -> bool:
@@ -463,7 +465,6 @@ class MarketDAO:
         """
         try:
             # Convert timestamp fields back to datetime
-            print(data)
             open_time = data["open_time"]
             if hasattr(open_time, "timestamp"):
                 open_time = datetime.fromtimestamp(open_time.timestamp())
@@ -493,6 +494,17 @@ class MarketDAO:
                 latest_expiration_time = datetime.fromisoformat(
                     latest_expiration_time.replace("Z", "+00:00")
                 )
+
+            # Convert updated_at timestamp if present
+            updated_at = None
+            if "updated_at" in data and data["updated_at"] is not None:
+                updated_at_value = data["updated_at"]
+                if hasattr(updated_at_value, "timestamp"):
+                    updated_at = datetime.fromtimestamp(updated_at_value.timestamp())
+                elif isinstance(updated_at_value, str):
+                    updated_at = datetime.fromisoformat(
+                        updated_at_value.replace("Z", "+00:00")
+                    )
 
             return Market(
                 ticker=data["ticker"],
@@ -544,6 +556,7 @@ class MarketDAO:
                 settlement_value_dollars=data.get("settlement_value_dollars"),
                 price_level_structure=data.get("price_level_structure"),
                 price_ranges=data.get("price_ranges"),
+                updated_at=updated_at,
             )
         except Exception as e:
             print(f"Failed to convert dict to market: {e}")

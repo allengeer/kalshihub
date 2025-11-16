@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 import functions_framework
 from cloudevents.http import CloudEvent
+from firebase_admin import firestore
 from google.cloud.firestore_v1.types import Value
 from google.cloud.firestore_v1.types.document import MutableMapping
 from google.events.cloud import firestore as firestoredata
@@ -16,8 +17,12 @@ from google.events.cloud import firestore as firestoredata
 # Import event publisher - handle both direct and relative imports
 try:
     from src.firebase.event_publisher import EventPublisher
+    from src.firebase.market_dao import MarketDAO
+    from src.kalshi.service import KalshiAPIService
 except ImportError:
     from firebase.event_publisher import EventPublisher  # type: ignore[no-redef]
+    from firebase.market_dao import MarketDAO  # type: ignore[no-redef]
+    from kalshi.service import KalshiAPIService  # type: ignore[no-redef]
 
 
 @functions_framework.cloud_event
@@ -73,8 +78,16 @@ def process_market_event(cloud_event: CloudEvent) -> None:
         # Process based on change type
         if change_type == "CREATE":
             _publish_market_created_from_dict(value, ticker, event_publisher)
+            # Check if score-based orderbook update is needed
+            _maybe_update_score_with_orderbook(
+                change_type, ticker, None, value, firebase_project_id
+            )
         elif change_type == "UPDATE":
             _publish_market_updated_from_dict(old_value, value, ticker, event_publisher)
+            # Check if score-based orderbook update is needed
+            _maybe_update_score_with_orderbook(
+                change_type, ticker, old_value, value, firebase_project_id
+            )
         elif change_type == "DELETE":
             # Markets are typically not deleted, but handle it if needed
             print(f"Market deleted: {ticker}")
@@ -152,20 +165,24 @@ def _determine_change_type_from_dict(
     """Determine the type of Firestore document change.
 
     Args:
-        old_value: Previous document state (None for CREATE)
-        new_value: New document state (None for DELETE)
+        old_value: Previous document state (empty mapping for CREATE)
+        new_value: New document state (empty mapping for DELETE)
 
     Returns:
         Change type: "CREATE", "UPDATE", or "DELETE"
     """
-    if old_value is None and new_value is not None:
+    # Check if mappings are empty (not just None, since .fields returns MutableMapping)
+    old_is_empty = not old_value or len(old_value) == 0
+    new_is_empty = not new_value or len(new_value) == 0
+
+    if old_is_empty and not new_is_empty:
         return "CREATE"
-    elif old_value is not None and new_value is None:
+    elif not old_is_empty and new_is_empty:
         return "DELETE"
-    elif old_value is not None and new_value is not None:
+    elif not old_is_empty and not new_is_empty:
         return "UPDATE"
     else:
-        # This shouldn't happen, but default to UPDATE
+        # Both empty - shouldn't happen, but default to UPDATE
         return "UPDATE"
 
 
@@ -378,3 +395,217 @@ def _format_firestore_timestamp(timestamp_value: Any) -> Optional[str]:
 
     # Fallback to string conversion
     return str(timestamp_value)
+
+
+def _maybe_update_score_with_orderbook(
+    change_type: str,
+    ticker: str,
+    old_fields: Optional[MutableMapping[str, Value]],
+    new_fields: MutableMapping[str, Value],
+    firebase_project_id: str,
+) -> None:
+    """Update market score with orderbook data if score conditions are met.
+
+    For CREATE: triggers when score > 0.1
+    For UPDATE: triggers when score crosses from < 0.1 to >= 0.1
+
+    Args:
+        change_type: "CREATE" or "UPDATE"
+        ticker: Market ticker
+        old_fields: Previous document state (None for CREATE)
+        new_fields: New document state
+        firebase_project_id: Firebase project ID
+    """
+    try:
+        # Extract score from new fields
+        new_score = _get_field_value(new_fields, "score")
+        if new_score is None:
+            return
+
+        # Convert to float if needed
+        if isinstance(new_score, (int, float)):
+            new_score_float = float(new_score)
+        else:
+            try:
+                new_score_float = float(new_score)
+            except (ValueError, TypeError):
+                print(f"Could not parse score for {ticker}: {new_score}")
+                return
+
+        # Check conditions based on change type
+        should_update = False
+
+        if change_type == "CREATE":
+            # For CREATE: trigger if score > 0.1
+            if new_score_float > 0.1:
+                should_update = True
+                print(
+                    f"CREATE: Market {ticker} has score {new_score_float:.4f} > 0.1, "
+                    "fetching orderbook"
+                )
+        elif change_type == "UPDATE":
+            # For UPDATE: trigger if score crossed from < 0.1 to >= 0.1
+            old_score = _get_field_value(old_fields, "score") if old_fields else None
+            if old_score is not None:
+                try:
+                    if isinstance(old_score, (int, float)):
+                        old_score_float = float(old_score)
+                    else:
+                        old_score_float = float(old_score)
+                except (ValueError, TypeError):
+                    old_score_float = None
+            else:
+                old_score_float = None
+
+            if old_score_float is not None:
+                if old_score_float < 0.1 and new_score_float >= 0.1:
+                    should_update = True
+                    print(
+                        f"UPDATE: Market {ticker} score crossed from "
+                        f"{old_score_float:.4f} to {new_score_float:.4f}, "
+                        "fetching orderbook"
+                    )
+            elif new_score_float >= 0.1:
+                # If old score was None but new score >= 0.1, also update
+                should_update = True
+                print(
+                    f"UPDATE: Market {ticker} has score {new_score_float:.4f} >= 0.1 "
+                    "(old score was None), fetching orderbook"
+                )
+
+        if not should_update:
+            return
+
+        # Fetch orderbook and update market
+        _update_market_score_with_orderbook(ticker, firebase_project_id)
+
+    except Exception as e:
+        print(f"ERROR checking score conditions for {ticker}: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+async def _fetch_orderbook_and_update_market(
+    ticker: str, firebase_project_id: str
+) -> None:
+    """Fetch orderbook and update market scores asynchronously.
+
+    Args:
+        ticker: Market ticker
+        firebase_project_id: Firebase project ID
+    """
+    try:
+        # Initialize services
+        # Use async context manager to ensure proper cleanup of HTTP client
+        async with KalshiAPIService() as kalshi_service:
+            market_dao = MarketDAO(
+                project_id=firebase_project_id,
+                credentials_path=os.getenv("FIREBASE_CREDENTIALS_PATH"),
+            )
+
+            # Get current market
+            market = market_dao.get_market(ticker)
+            if not market:
+                print(f"Market {ticker} not found in database")
+                return
+
+            # Fetch orderbook with depth=3
+            print(f"Fetching orderbook for {ticker} with depth=3")
+            orderbook_response = await kalshi_service.get_market_orderbook(
+                ticker, depth=3
+            )
+
+            if not orderbook_response or not orderbook_response.orderbook:
+                print(f"No orderbook data returned for {ticker}")
+                return
+
+            # Update market scores with orderbook data
+            updated_scores = market.update_score_with_orderbook(
+                orderbook_response.orderbook
+            )
+
+            # Update market object with new scores
+            # Note: We can't directly set properties on Market dataclass,
+            # so we need to create a new Market object with updated values
+            # However, since score, taker_potential, and maker_potential are
+            # computed properties, we need to store them separately or
+            # update the market in a way that preserves them.
+
+            # Actually, looking at MarketDAO._market_to_dict, it stores score,
+            # taker_potential, and maker_potential. But these are computed properties.
+            # We need to update the market document directly with the new values.
+
+            # Update the market document with new score values
+            db = market_dao._get_db()
+            market_ref = db.collection("markets").document(ticker)
+
+            # Update score-related fields and updated_at timestamp
+            # updated_at must be updated so maker_potential stability score
+            # (exp(-stale_seconds / TAU_UPD)) reflects fresh orderbook data
+            market_ref.update(
+                {
+                    "score": updated_scores["score_enhanced"],
+                    "taker_potential": updated_scores["taker_potential"],
+                    "maker_potential": updated_scores["maker_potential"],
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+
+            print(
+                f"Updated market {ticker} scores: "
+                f"score={updated_scores['score_enhanced']:.4f}, "
+                f"taker={updated_scores['taker_potential']:.4f}, "
+                f"maker={updated_scores['maker_potential']:.4f}"
+            )
+
+    except Exception as e:
+        print(f"ERROR updating market {ticker} with orderbook: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+def _update_market_score_with_orderbook(ticker: str, firebase_project_id: str) -> None:
+    """Synchronous wrapper to run async orderbook update.
+
+    This function runs the async orderbook fetch and update, handling both
+    cases where an event loop may or may not already be running.
+
+    Args:
+        ticker: Market ticker
+        firebase_project_id: Firebase project ID
+    """
+    import asyncio
+    import concurrent.futures
+
+    async def _run_async_task() -> None:
+        """Run the async orderbook update task."""
+        await _fetch_orderbook_and_update_market(ticker, firebase_project_id)
+
+    try:
+        # Check if there's already a running event loop
+        try:
+            asyncio.get_running_loop()
+            # Event loop is already running - run in a separate thread with new loop
+            # This prevents "RuntimeError: This event loop is already running"
+
+            def run_in_new_loop() -> None:
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
+                try:
+                    new_loop.run_until_complete(_run_async_task())
+                finally:
+                    new_loop.close()
+
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_new_loop)
+                future.result()  # Wait for completion
+        except RuntimeError:
+            # No event loop is running - safe to use asyncio.run()
+            asyncio.run(_run_async_task())
+    except Exception as e:
+        print(f"ERROR running async orderbook update for {ticker}: {e}")
+        import traceback
+
+        traceback.print_exc()

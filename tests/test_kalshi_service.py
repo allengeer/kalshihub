@@ -7,7 +7,14 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from src.kalshi.service import KalshiAPIService, Market, MarketsResponse
+from src.kalshi.service import (
+    GetMarketOrderbookResponse,
+    KalshiAPIService,
+    Market,
+    MarketsResponse,
+    Orderbook,
+    OrderbookLevel,
+)
 
 
 class TestKalshiAPIService:
@@ -1332,5 +1339,478 @@ class TestMarketsResponse:
         assert response.cursor == "test_cursor"
         assert len(response.markets) == 1
         assert response.markets[0].ticker == "TEST-2024"
-        assert response.markets[0].ticker == "TEST-2024"
-        assert response.markets[0].ticker == "TEST-2024"
+
+
+class TestOrderbook:
+    """Test cases for Orderbook dataclasses."""
+
+    def test_orderbook_level_creation(self):
+        """Test OrderbookLevel dataclass creation."""
+        level = OrderbookLevel(price=50, count=100)
+        assert level.price == 50
+        assert level.count == 100
+
+    def test_orderbook_creation(self):
+        """Test Orderbook dataclass creation."""
+        yes_levels = [
+            OrderbookLevel(price=45, count=100),
+            OrderbookLevel(price=46, count=200),
+        ]
+        no_levels = [
+            OrderbookLevel(price=55, count=150),
+            OrderbookLevel(price=56, count=250),
+        ]
+        yes_dollars = [("0.45", 100), ("0.46", 200)]
+        no_dollars = [("0.55", 150), ("0.56", 250)]
+
+        orderbook = Orderbook(
+            yes=yes_levels, no=no_levels, yes_dollars=yes_dollars, no_dollars=no_dollars
+        )
+
+        assert len(orderbook.yes) == 2
+        assert len(orderbook.no) == 2
+        assert len(orderbook.yes_dollars) == 2
+        assert len(orderbook.no_dollars) == 2
+        assert orderbook.yes[0].price == 45
+        assert orderbook.yes[0].count == 100
+
+    def test_get_market_orderbook_response_creation(self):
+        """Test GetMarketOrderbookResponse dataclass creation."""
+        orderbook = Orderbook(
+            yes=[OrderbookLevel(price=45, count=100)],
+            no=[OrderbookLevel(price=55, count=150)],
+            yes_dollars=[("0.45", 100)],
+            no_dollars=[("0.55", 150)],
+        )
+        response = GetMarketOrderbookResponse(orderbook=orderbook)
+        assert response.orderbook == orderbook
+
+    def test_orderbook_properties(self):
+        """Test Orderbook computed properties."""
+        orderbook = Orderbook(
+            yes=[
+                OrderbookLevel(price=45, count=100),
+                OrderbookLevel(price=44, count=200),
+            ],
+            no=[
+                OrderbookLevel(price=55, count=150),
+                OrderbookLevel(price=56, count=250),
+            ],
+            yes_dollars=[("0.45", 100), ("0.44", 200)],
+            no_dollars=[("0.55", 150), ("0.56", 250)],
+        )
+
+        # Test best yes bid
+        assert orderbook.best_yes_bid == 45
+        assert orderbook.best_yes_bid_qty == 100
+
+        # Test best no bid
+        assert orderbook.best_no_bid == 55
+        assert orderbook.best_no_bid_qty == 150
+
+        # Test yes ask L1 (100 - best_no_bid = 100 - 55 = 45)
+        assert orderbook.yes_ask_l1 == 45
+        assert orderbook.yes_ask_l1_qty == 150
+
+        # Test spread (yes_ask_l1 - best_yes_bid = 45 - 45 = 0)
+        assert orderbook.spread == 0
+
+        # Test mid ((yes_ask_l1 + best_yes_bid) / 2 = (45 + 45) / 2 = 45)
+        assert orderbook.mid == 45
+
+        # Test with different values
+        orderbook2 = Orderbook(
+            yes=[OrderbookLevel(price=48, count=200)],
+            no=[OrderbookLevel(price=52, count=300)],
+            yes_dollars=[("0.48", 200)],
+            no_dollars=[("0.52", 300)],
+        )
+
+        assert orderbook2.best_yes_bid == 48
+        assert orderbook2.yes_ask_l1 == 48  # 100 - 52 = 48
+        assert orderbook2.spread == 0  # 48 - 48 = 0
+        assert orderbook2.mid == 48  # (48 + 48) / 2 = 48
+
+        # Test with empty orderbook
+        empty_orderbook = Orderbook(yes=[], no=[], yes_dollars=[], no_dollars=[])
+        assert empty_orderbook.best_yes_bid is None
+        assert empty_orderbook.best_yes_bid_qty is None
+        assert empty_orderbook.best_no_bid is None
+        assert empty_orderbook.best_no_bid_qty is None
+        assert empty_orderbook.yes_ask_l1 is None
+        assert empty_orderbook.yes_ask_l1_qty is None
+        assert empty_orderbook.spread is None
+        assert empty_orderbook.mid is None
+
+        # Test with only yes bids (no no bids)
+        yes_only = Orderbook(
+            yes=[OrderbookLevel(price=50, count=100)],
+            no=[],
+            yes_dollars=[("0.50", 100)],
+            no_dollars=[],
+        )
+        assert yes_only.best_yes_bid == 50
+        assert yes_only.yes_ask_l1 is None  # No no bids means no yes ask
+        assert yes_only.spread is None
+        assert yes_only.mid is None
+
+    def test_orderbook_depth_properties(self):
+        """Test Orderbook depth calculation properties."""
+        orderbook = Orderbook(
+            yes=[
+                OrderbookLevel(price=45, count=100),
+                OrderbookLevel(price=44, count=200),
+                OrderbookLevel(price=43, count=150),
+                OrderbookLevel(price=42, count=100),
+                OrderbookLevel(price=41, count=50),
+            ],
+            no=[
+                OrderbookLevel(price=55, count=150),
+                OrderbookLevel(price=56, count=250),
+                OrderbookLevel(price=57, count=100),
+                OrderbookLevel(price=58, count=200),
+            ],
+            yes_dollars=[],
+            no_dollars=[],
+        )
+
+        # Test depth_ask_withinK
+        # best_no_bid = 55, K=5, threshold = 55 - (5-1) = 51
+        # No bids >= 51: 55, 56, 57, 58 -> 150 + 250 + 100 + 200 = 700
+        assert orderbook.depth_ask_withinK(5) == 700
+
+        # Test depth_bid_withinK
+        # best_yes_bid = 45, K=5, threshold = 45 - (5-1) = 41
+        # Yes bids >= 41: 45, 44, 43, 42, 41 -> 100 + 200 + 150 + 100 + 50 = 600
+        assert orderbook.depth_bid_withinK(5) == 600
+
+        # Test depth_yes_topN (last N levels)
+        # Last 3 yes bids: 43, 42, 41 -> 150 + 100 + 50 = 300
+        assert orderbook.depth_yes_topN(3) == 300
+
+        # Test depth_no_topN (last N levels)
+        # Last 2 no bids: 57, 58 -> 100 + 200 = 300
+        assert orderbook.depth_no_topN(2) == 300
+
+        # Test bid_depth (uses default N_TOP=5)
+        assert orderbook.bid_depth == orderbook.depth_yes_topN(5)
+
+        # Test ask_depth (uses default K_DEPTH=5)
+        assert orderbook.ask_depth == orderbook.depth_ask_withinK(5)
+
+        # Test obi (orderbook imbalance)
+        # bid_depth = 600, ask_depth = 700
+        # obi = (600 - 700) / max(1, 1300) = -100 / 1300 ≈ -0.0769
+        obi_value = orderbook.obi
+        assert obi_value is not None
+        assert -1.0 <= obi_value <= 1.0
+        assert obi_value < 0  # More ask depth than bid depth
+
+        # Test micro
+        # yes_ask_l1 = 45, best_yes_bid = 45, qty_yes_l1 = 150
+        # micro = (45*150 + 45*150) / (150 + 150) = 13500 / 300 = 45.0
+        micro_value = orderbook.micro
+        assert micro_value is not None
+        assert abs(micro_value - 45.0) < 0.01
+
+        # Test micro_tilt
+        # micro = 45.0, mid = 45, micro_tilt = 45.0 - 45 = 0.0
+        tilt_value = orderbook.micro_tilt
+        assert tilt_value is not None
+        assert abs(tilt_value - 0.0) < 0.01
+
+        # Test with different values for micro_tilt
+        orderbook2 = Orderbook(
+            yes=[OrderbookLevel(price=48, count=200)],
+            no=[OrderbookLevel(price=52, count=100)],  # yes_ask_l1 = 48
+            yes_dollars=[],
+            no_dollars=[],
+        )
+        # micro = (48*100 + 48*200) / (100 + 200) = 14400 / 300 = 48.0
+        # mid = (48 + 48) / 2 = 48
+        # micro_tilt = 48.0 - 48 = 0.0
+        assert abs(orderbook2.micro_tilt - 0.0) < 0.01
+
+        # Test micro calculation with different ask/bid prices and quantities
+        # This verifies the fix: micro uses best_yes_bid_qty, not yes_ask_l1_qty
+        orderbook3 = Orderbook(
+            yes=[OrderbookLevel(price=50, count=300)],  # best_yes_bid = 50, qty = 300
+            no=[OrderbookLevel(price=52, count=100)],  # yes_ask_l1 = 48, qty = 100
+            yes_dollars=[],
+            no_dollars=[],
+        )
+        # micro = (48*100 + 50*300) / (100 + 300) = (4800 + 15000) / 400 = 19800 / 400 = 49.5
+        # With buggy code: micro = (48*100 + 50*100) / 200 = 9800 / 200 = 49.0 (WRONG)
+        micro_value3 = orderbook3.micro
+        assert micro_value3 is not None
+        assert abs(micro_value3 - 49.5) < 0.01  # Should be 49.5, not 49.0
+
+        # Test with empty orderbook
+        empty = Orderbook(yes=[], no=[], yes_dollars=[], no_dollars=[])
+        assert empty.depth_ask_withinK() == 0
+        assert empty.depth_bid_withinK() == 0
+        assert empty.depth_yes_topN() == 0
+        assert empty.depth_no_topN() == 0
+        assert empty.bid_depth == 0
+        assert empty.ask_depth == 0
+        assert empty.obi is None
+        assert empty.micro is None
+        assert empty.micro_tilt is None
+
+    def test_update_score_with_orderbook(self):
+        """Test Market.update_score_with_orderbook method."""
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        market = Market(
+            ticker="TEST-2024",
+            event_ticker="EVENT-2024",
+            market_type="binary",
+            title="Test Market",
+            subtitle="",
+            yes_sub_title="Yes",
+            no_sub_title="No",
+            open_time=now - timedelta(hours=1),
+            close_time=now + timedelta(hours=2),  # 2h to close
+            expiration_time=now + timedelta(hours=2),
+            latest_expiration_time=now + timedelta(hours=2),
+            settlement_timer_seconds=7200,
+            status="open",
+            response_price_units="cents",
+            notional_value=10000,
+            notional_value_dollars="100.00",
+            tick_size=1,
+            yes_bid=48,
+            yes_bid_dollars="0.48",
+            yes_ask=52,
+            yes_ask_dollars="0.52",
+            no_bid=45,
+            no_bid_dollars="0.45",
+            no_ask=55,
+            no_ask_dollars="0.55",
+            last_price=50,
+            last_price_dollars="0.50",
+            previous_yes_bid=44,
+            previous_yes_bid_dollars="0.44",
+            previous_yes_ask=56,
+            previous_yes_ask_dollars="0.56",
+            previous_price=49,
+            previous_price_dollars="0.49",
+            volume=1000,
+            volume_24h=5000,
+            liquidity=2000,
+            liquidity_dollars="20.00",
+            open_interest=10000,
+            result="unknown",
+            can_close_early=False,
+            expiration_value="unknown",
+            category="politics",
+            risk_limit_cents=100000,
+            rules_primary="",
+            rules_secondary="",
+            updated_at=now,
+        )
+
+        # Create orderbook with good depth and narrow spread
+        orderbook = Orderbook(
+            yes=[
+                OrderbookLevel(price=48, count=500),  # Best yes bid
+                OrderbookLevel(price=47, count=300),
+                OrderbookLevel(price=46, count=200),
+            ],
+            no=[
+                OrderbookLevel(price=52, count=400),  # Best no bid -> yes ask = 48
+                OrderbookLevel(price=53, count=300),
+                OrderbookLevel(price=54, count=200),
+            ],
+            yes_dollars=[],
+            no_dollars=[],
+        )
+
+        # Calculate expected values
+        # Spread = yes_ask_l1 - best_yes_bid = 48 - 48 = 0
+        # D_ask = depth_ask_withinK(5) / (depth_ask_withinK(5) + K_LIQ)
+        # D_bid = depth_bid_withinK(5) / (depth_bid_withinK(5) + K_LIQ)
+        # D_total = (depth_yes_topN(5) + depth_no_topN(5)) / (sum + K_LIQ_SUM)
+
+        result = market.update_score_with_orderbook(orderbook)
+
+        # Verify result structure
+        assert "taker_potential" in result
+        assert "maker_potential" in result
+        assert "raw_score" in result
+        assert "score_enhanced" in result
+
+        # Verify all values are floats
+        assert isinstance(result["taker_potential"], float)
+        assert isinstance(result["maker_potential"], float)
+        assert isinstance(result["raw_score"], float)
+        assert isinstance(result["score_enhanced"], float)
+
+        # Verify values are non-negative
+        assert result["taker_potential"] >= 0
+        assert result["maker_potential"] >= 0
+        assert result["raw_score"] >= 0
+        assert result["score_enhanced"] >= 0
+
+        # Verify score_enhanced = raw_score * time_to_close_weight
+        expected_score_enhanced = result["raw_score"] * market.time_to_close_weight
+        assert abs(result["score_enhanced"] - expected_score_enhanced) < 0.0001
+
+        # Test with wide spread (should favor maker potential)
+        # yes_bid = 40, no_bid = 50 -> yes_ask = 50, spread = 10
+        wide_orderbook = Orderbook(
+            yes=[OrderbookLevel(price=40, count=100)],
+            no=[OrderbookLevel(price=50, count=100)],  # yes_ask = 50, spread = 10
+            yes_dollars=[],
+            no_dollars=[],
+        )
+
+        wide_result = market.update_score_with_orderbook(wide_orderbook)
+        # Wide spread should reduce taker_potential (S_spread_narrow decreases)
+        # and increase maker_potential (S_spread_wide increases)
+        assert wide_result["maker_potential"] >= 0
+
+        # Test with empty orderbook (spread is None)
+        empty_orderbook = Orderbook(yes=[], no=[], yes_dollars=[], no_dollars=[])
+        assert empty_orderbook.spread is None  # Verify spread is None
+        empty_result = market.update_score_with_orderbook(empty_orderbook)
+        # With no depth and missing spread data, potentials should be low (0.0)
+        # Missing spread should not be treated as perfect spread (spread=0)
+        assert empty_result["taker_potential"] == 0.0
+        assert empty_result["maker_potential"] == 0.0
+        assert empty_result["raw_score"] == 0.0
+
+
+class TestGetMarketOrderbook:
+    """Test cases for get_market_orderbook method."""
+
+    @pytest.fixture
+    def service(self):
+        """Create a KalshiAPIService instance for testing."""
+        return KalshiAPIService()
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_success(self, service):
+        """Test successful orderbook retrieval."""
+        mock_response_data = {
+            "orderbook": {
+                "yes": [[45, 100], [46, 200]],
+                "no": [[55, 150], [56, 250]],
+                "yes_dollars": [["0.45", 100], ["0.46", 200]],
+                "no_dollars": [["0.55", 150], ["0.56", 250]],
+            }
+        }
+
+        with patch.object(service, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await service.get_market_orderbook("TEST-2024", depth=3)
+
+            assert isinstance(result, GetMarketOrderbookResponse)
+            assert len(result.orderbook.yes) == 2
+            assert len(result.orderbook.no) == 2
+            assert result.orderbook.yes[0].price == 45
+            assert result.orderbook.yes[0].count == 100
+            assert result.orderbook.no[0].price == 55
+            assert result.orderbook.no[0].count == 150
+            assert result.orderbook.yes_dollars[0] == ("0.45", 100)
+            assert result.orderbook.no_dollars[0] == ("0.55", 150)
+
+            # Verify API call
+            mock_client.get.assert_called_once()
+            call_args = mock_client.get.call_args
+            assert "TEST-2024/orderbook" in call_args[0][0]
+            assert call_args[1]["params"]["depth"] == 3
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_default_depth(self, service):
+        """Test orderbook retrieval with default depth."""
+        mock_response_data = {
+            "orderbook": {
+                "yes": [[45, 100]],
+                "no": [[55, 150]],
+                "yes_dollars": [["0.45", 100]],
+                "no_dollars": [["0.55", 150]],
+            }
+        }
+
+        with patch.object(service, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await service.get_market_orderbook("TEST-2024")
+
+            assert isinstance(result, GetMarketOrderbookResponse)
+            # Verify default depth (3) was used
+            call_args = mock_client.get.call_args
+            assert call_args[1]["params"]["depth"] == 3
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_all_levels(self, service):
+        """Test orderbook retrieval with depth=0 (all levels)."""
+        mock_response_data = {
+            "orderbook": {
+                "yes": [[45, 100], [46, 200], [47, 300]],
+                "no": [[55, 150], [56, 250], [57, 350]],
+                "yes_dollars": [["0.45", 100], ["0.46", 200], ["0.47", 300]],
+                "no_dollars": [["0.55", 150], ["0.56", 250], ["0.57", 350]],
+            }
+        }
+
+        with patch.object(service, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            result = await service.get_market_orderbook("TEST-2024", depth=0)
+
+            assert isinstance(result, GetMarketOrderbookResponse)
+            assert len(result.orderbook.yes) == 3
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_invalid_depth(self, service):
+        """Test orderbook retrieval with invalid depth."""
+        with pytest.raises(ValueError, match="depth must be <= 100"):
+            await service.get_market_orderbook("TEST-2024", depth=101)
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_http_error(self, service):
+        """Test orderbook retrieval with HTTP error."""
+        with patch.object(service, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.raise_for_status.side_effect = httpx.HTTPError("Not Found")
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            with pytest.raises(httpx.HTTPError, match="Failed to fetch orderbook"):
+                await service.get_market_orderbook("TEST-2024")
+
+    @pytest.mark.asyncio
+    async def test_get_market_orderbook_invalid_response_format(self, service):
+        """Test orderbook retrieval with invalid response format."""
+        mock_response_data = {"invalid": "data"}
+
+        with patch.object(service, "_get_client") as mock_get_client:
+            mock_client = AsyncMock()
+            mock_response = MagicMock()
+            mock_response.json.return_value = mock_response_data
+            mock_response.raise_for_status = MagicMock()
+            mock_client.get = AsyncMock(return_value=mock_response)
+            mock_get_client.return_value = mock_client
+
+            with pytest.raises(ValueError, match="Invalid response format"):
+                await service.get_market_orderbook("TEST-2024")
