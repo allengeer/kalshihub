@@ -603,6 +603,66 @@ class TestMarketDAO:
         assert market.ticker == "TEST-2024"
         assert market.event_ticker == "EVENT-2024"
         assert market.title == "Test Market"
+        # updated_at should be None when not provided
+        assert market.updated_at is None
+
+    def test_dict_to_market_with_updated_at(self, market_dao):
+        """Test converting dictionary to Market object with updated_at field."""
+        updated_at_time = datetime(2024, 6, 15, 12, 0, 0)
+        data = {
+            "ticker": "TEST-2024",
+            "event_ticker": "EVENT-2024",
+            "market_type": "binary",
+            "title": "Test Market",
+            "subtitle": "Test Market Subtitle",
+            "yes_sub_title": "Yes",
+            "no_sub_title": "No",
+            "status": "open",
+            "open_time": datetime(2024, 1, 1),
+            "close_time": datetime(2024, 12, 31),
+            "expiration_time": datetime(2024, 12, 31),
+            "latest_expiration_time": datetime(2024, 12, 31),
+            "settlement_timer_seconds": 3600,
+            "response_price_units": "cents",
+            "notional_value": 10000,
+            "notional_value_dollars": "100.00",
+            "tick_size": 1,
+            "yes_bid": 45,
+            "yes_bid_dollars": "0.45",
+            "yes_ask": 55,
+            "yes_ask_dollars": "0.55",
+            "no_bid": 45,
+            "no_bid_dollars": "0.45",
+            "no_ask": 55,
+            "no_ask_dollars": "0.55",
+            "last_price": 50,
+            "last_price_dollars": "0.50",
+            "previous_yes_bid": 45,
+            "previous_yes_bid_dollars": "0.45",
+            "previous_yes_ask": 55,
+            "previous_yes_ask_dollars": "0.55",
+            "previous_price": 50,
+            "previous_price_dollars": "0.50",
+            "volume": 1000,
+            "volume_24h": 500,
+            "liquidity": 5000,
+            "liquidity_dollars": "50.00",
+            "open_interest": 100,
+            "result": "",
+            "can_close_early": False,
+            "expiration_value": "",
+            "category": "politics",
+            "risk_limit_cents": 100000,
+            "rules_primary": "",
+            "rules_secondary": "",
+            "updated_at": updated_at_time,
+        }
+
+        market = market_dao._dict_to_market(data)
+
+        assert market is not None
+        assert market.ticker == "TEST-2024"
+        assert market.updated_at == updated_at_time
 
     def test_dict_to_market_invalid_data(self, market_dao):
         """Test converting invalid dictionary to Market object."""
