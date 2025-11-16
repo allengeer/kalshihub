@@ -164,20 +164,24 @@ def _determine_change_type_from_dict(
     """Determine the type of Firestore document change.
 
     Args:
-        old_value: Previous document state (None for CREATE)
-        new_value: New document state (None for DELETE)
+        old_value: Previous document state (empty mapping for CREATE)
+        new_value: New document state (empty mapping for DELETE)
 
     Returns:
         Change type: "CREATE", "UPDATE", or "DELETE"
     """
-    if old_value is None and new_value is not None:
+    # Check if mappings are empty (not just None, since .fields returns MutableMapping)
+    old_is_empty = not old_value or len(old_value) == 0
+    new_is_empty = not new_value or len(new_value) == 0
+
+    if old_is_empty and not new_is_empty:
         return "CREATE"
-    elif old_value is not None and new_value is None:
+    elif not old_is_empty and new_is_empty:
         return "DELETE"
-    elif old_value is not None and new_value is not None:
+    elif not old_is_empty and not new_is_empty:
         return "UPDATE"
     else:
-        # This shouldn't happen, but default to UPDATE
+        # Both empty - shouldn't happen, but default to UPDATE
         return "UPDATE"
 
 
