@@ -1671,13 +1671,15 @@ class TestOrderbook:
         # and increase maker_potential (S_spread_wide increases)
         assert wide_result["maker_potential"] >= 0
 
-        # Test with empty orderbook
+        # Test with empty orderbook (spread is None)
         empty_orderbook = Orderbook(yes=[], no=[], yes_dollars=[], no_dollars=[])
+        assert empty_orderbook.spread is None  # Verify spread is None
         empty_result = market.update_score_with_orderbook(empty_orderbook)
-        # With no depth, potentials should be low
-        assert empty_result["taker_potential"] >= 0
-        assert empty_result["maker_potential"] >= 0
-        assert empty_result["raw_score"] >= 0
+        # With no depth and missing spread data, potentials should be low (0.0)
+        # Missing spread should not be treated as perfect spread (spread=0)
+        assert empty_result["taker_potential"] == 0.0
+        assert empty_result["maker_potential"] == 0.0
+        assert empty_result["raw_score"] == 0.0
 
 
 class TestGetMarketOrderbook:

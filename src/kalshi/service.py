@@ -381,10 +381,13 @@ class Market:
         # Calculate spread scores
         spread = orderbook.spread
         if spread is None:
-            spread = 0
-
-        S_spread_narrow = max(0.0, min(1.0, 1 - (spread / self.S_MAX)))
-        S_spread_wide = max(0.0, min(1.0, spread / self.P_MAX))
+            # Missing spread data indicates incomplete orderbook - penalize scores
+            # rather than treating missing data as perfect spread (spread=0)
+            S_spread_narrow = 0.0
+            S_spread_wide = 0.0
+        else:
+            S_spread_narrow = max(0.0, min(1.0, 1 - (spread / self.S_MAX)))
+            S_spread_wide = max(0.0, min(1.0, spread / self.P_MAX))
 
         # Calculate OBI balance score
         obi = orderbook.obi
