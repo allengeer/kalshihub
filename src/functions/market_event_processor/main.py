@@ -639,6 +639,7 @@ async def _fetch_orderbook_and_update_market(
             current_maker = _get_field_value(
                 current_data if isinstance(current_data, dict) else {},
                 "maker_potential",
+            )
             # Store both original (market data) and orderbook-based potentials
             # separately. Original potentials are from market data calculations.
             # Orderbook potentials are from deep scan with orderbook data.
