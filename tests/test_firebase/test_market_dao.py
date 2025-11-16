@@ -154,6 +154,9 @@ class TestMarketDAO:
         assert "updated_at" in market_dict
         assert "crawled_at" in market_dict
         assert "data_hash" in market_dict
+        assert "score" in market_dict
+        assert isinstance(market_dict["score"], float)
+        assert 0.0 <= market_dict["score"] <= 1.0
 
     def test_create_market_success(self, market_dao, sample_market):
         """Test successful market creation."""

@@ -183,6 +183,7 @@ class MarketDAO:
             "updated_at": now,
             "crawled_at": now,
             "data_hash": data_hash,
+            "score": market.score,  # Calculate and store score for querying/sorting
         }
 
     def create_market(self, market: Market) -> bool:
