@@ -179,6 +179,59 @@ class FirebaseSchemaManager:
                             "required": True,
                             "indexed": True,
                         },
+                        "score": {
+                            "type": "number",
+                            "description": (
+                                "Calculated score from market data "
+                                "(original calculation)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
+                        "taker_potential": {
+                            "type": "number",
+                            "description": (
+                                "Taker potential calculated from market data "
+                                "(original)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
+                        "maker_potential": {
+                            "type": "number",
+                            "description": (
+                                "Maker potential calculated from market data "
+                                "(original)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
+                        "score_orderbook": {
+                            "type": "number",
+                            "description": (
+                                "Calculated score from orderbook data " "(deep scan)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
+                        "taker_potential_orderbook": {
+                            "type": "number",
+                            "description": (
+                                "Taker potential calculated from orderbook data "
+                                "(deep scan)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
+                        "maker_potential_orderbook": {
+                            "type": "number",
+                            "description": (
+                                "Maker potential calculated from orderbook data "
+                                "(deep scan)"
+                            ),
+                            "required": False,
+                            "indexed": True,
+                        },
                     },
                 },
                 "orderbooks": {
