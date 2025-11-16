@@ -679,10 +679,8 @@ class Orderbook:
         """Calculate micro price (weighted average of L1 ask and best bid).
 
         Formula:
-            (yes_ask_L1 * qty_yes_L1 + best_yes_bid * qty_ask_L1)
-            / max(1, (qty_yes_L1 + qty_ask_L1))
-
-        Note: Uses yes_ask_l1_qty for both quantities as per formula.
+            (yes_ask_L1 * qty_yes_L1 + best_yes_bid * qty_yes_bid)
+            / max(1, (qty_yes_L1 + qty_yes_bid))
 
         Returns:
             Micro price in cents, or None if values unavailable.
@@ -690,12 +688,18 @@ class Orderbook:
         yes_ask = self.yes_ask_l1
         yes_bid = self.best_yes_bid
         qty_yes_l1 = self.yes_ask_l1_qty
-        if yes_ask is None or yes_bid is None or qty_yes_l1 is None:
+        qty_yes_bid = self.best_yes_bid_qty
+        if (
+            yes_ask is None
+            or yes_bid is None
+            or qty_yes_l1 is None
+            or qty_yes_bid is None
+        ):
             return None
-        total_qty = qty_yes_l1 + qty_yes_l1  # As per formula
+        total_qty = qty_yes_l1 + qty_yes_bid
         if total_qty == 0:
             return None
-        numerator = yes_ask * qty_yes_l1 + yes_bid * qty_yes_l1
+        numerator = yes_ask * qty_yes_l1 + yes_bid * qty_yes_bid
         return numerator / max(1, total_qty)
 
     @property
@@ -957,8 +961,8 @@ class KalshiAPIService:
             ValueError: If invalid parameters are provided
         """
         # Validate parameters
-        if depth < 0 or depth > 100:
-            raise ValueError("depth must be between 0 and 100")
+        if depth > 100:
+            raise ValueError("depth must be <= 100 (0 or negative means all levels)")
 
         # Build query parameters
         params: Dict[str, Any] = {}

@@ -1526,10 +1526,24 @@ class TestOrderbook:
             yes_dollars=[],
             no_dollars=[],
         )
-        # micro = (48*100 + 48*100) / 200 = 48.0
+        # micro = (48*100 + 48*200) / (100 + 200) = 14400 / 300 = 48.0
         # mid = (48 + 48) / 2 = 48
         # micro_tilt = 48.0 - 48 = 0.0
         assert abs(orderbook2.micro_tilt - 0.0) < 0.01
+
+        # Test micro calculation with different ask/bid prices and quantities
+        # This verifies the fix: micro uses best_yes_bid_qty, not yes_ask_l1_qty
+        orderbook3 = Orderbook(
+            yes=[OrderbookLevel(price=50, count=300)],  # best_yes_bid = 50, qty = 300
+            no=[OrderbookLevel(price=52, count=100)],  # yes_ask_l1 = 48, qty = 100
+            yes_dollars=[],
+            no_dollars=[],
+        )
+        # micro = (48*100 + 50*300) / (100 + 300) = (4800 + 15000) / 400 = 19800 / 400 = 49.5
+        # With buggy code: micro = (48*100 + 50*100) / 200 = 9800 / 200 = 49.0 (WRONG)
+        micro_value3 = orderbook3.micro
+        assert micro_value3 is not None
+        assert abs(micro_value3 - 49.5) < 0.01  # Should be 49.5, not 49.0
 
         # Test with empty orderbook
         empty = Orderbook(yes=[], no=[], yes_dollars=[], no_dollars=[])
