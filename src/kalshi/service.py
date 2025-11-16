@@ -1,8 +1,9 @@
 """Kalshi API service for interacting with the Kalshi prediction market API."""
 
 import asyncio
+import math
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -61,6 +62,290 @@ class Market:
     settlement_value_dollars: Optional[str] = None
     price_level_structure: Optional[str] = None
     price_ranges: Optional[List[Dict[str, str]]] = None
+    updated_at: Optional[datetime] = None
+
+    # Configuration constants for scoring
+    S_MAX = 8  # Maximum spread for spread score calculation
+
+    # Activity score weights and parameters
+    W_VOL = 0.5  # Weight for volume component
+    W_OI = 0.5  # Weight for open interest component
+    NORM_K = 1000.0  # Soft cap parameter for normalization: x / (x + k)
+
+    # Moneyness score parameter
+    KAPPA = 15.0  # Parameter for moneyness score (κ≈12–20)
+
+    # Taker potential exponents
+    ALPHA = 1.0  # Exponent for spread_score (α≈1)
+    BETA = 1.0  # Exponent for activity_score (β≈1)
+    GAMMA = 1.0  # Exponent for moneyness_score (γ≈1)
+
+    # Maker potential parameters
+    P_MAX = 15  # Maximum spread for parity slack calculation
+    LIQUIDITY_CAP = 500.0  # Cap for liquidity normalization (in dollars)
+    TAU_UPD = 300  # Time constant for stability (seconds, 5 minutes)
+
+    # Maker potential exponents
+    MAKER_ALPHA = 1.0  # Exponent for parity slack (α≈1)
+    MAKER_BETA = 1.0  # Exponent for liquidity (β≈1)
+
+    # Score weights
+    W_TAKER = 0.6  # Weight for taker potential in raw score
+    W_MAKER = 0.4  # Weight for maker potential in raw score
+
+    @property
+    def mid(self) -> int:
+        """Calculate the midpoint of yes bid and ask prices."""
+        return (self.yes_bid + self.yes_ask) // 2
+
+    @property
+    def tt_close(self) -> float:
+        """Calculate time until close time in hours.
+
+        Returns:
+            Time until close_time in hours. Returns 0.0 if close_time is in the past.
+        """
+        now = datetime.now(timezone.utc)
+        # Ensure close_time is timezone-aware
+        close = self.close_time
+        if close.tzinfo is None:
+            close = close.replace(tzinfo=timezone.utc)
+
+        delta = close - now
+        hours = delta.total_seconds() / 3600.0
+        return max(0.0, hours)
+
+    @property
+    def spread(self) -> int:
+        """Calculate the spread between yes ask and bid prices."""
+        return self.yes_ask - self.yes_bid
+
+    @property
+    def spread_score(self) -> float:
+        """Calculate spread score: clip(1 - spread/S_MAX, 0, 1).
+
+        Returns:
+            Score between 0 and 1, where:
+            - 1.0 = best spread (spread = 0)
+            - 0.0 = worst spread (spread >= S_MAX)
+        """
+        score = 1 - (self.spread / self.S_MAX)
+        # Clip between 0 and 1
+        return max(0.0, min(1.0, score))
+
+    def _norm(self, x: float) -> float:
+        """Normalize value using soft cap: x / (x + k).
+
+        Args:
+            x: Value to normalize
+
+        Returns:
+            Normalized value between 0 and 1
+        """
+        return x / (x + self.NORM_K)
+
+    def _has_price_changed(self) -> bool:
+        """Check if market prices have changed since last update.
+
+        Returns:
+            True if bid/ask or last_price has changed, False otherwise
+        """
+        bid_changed = self.yes_bid != self.previous_yes_bid
+        ask_changed = self.yes_ask != self.previous_yes_ask
+        price_changed = self.last_price != self.previous_price
+        return bid_changed or ask_changed or price_changed
+
+    @property
+    def activity_score(self) -> float:
+        """Calculate activity score: prefer recently traded markets.
+
+        Formula:
+            A = w_vol * norm(volume_24h) + w_oi * norm(open_interest)
+                + w_fresh * freshness_score
+
+        Freshness score:
+            - 1.0 if prices have changed (recent trading activity)
+            - Otherwise decays based on volume_24h (higher volume = more activity)
+
+        Returns:
+            Activity score between 0 and 1, where:
+            - Higher values indicate more active markets
+            - Components: volume (24h), open interest, and freshness
+        """
+        # Normalize volume_24h and open_interest
+        norm_volume = self._norm(float(self.volume_24h))
+        norm_open_interest = self._norm(float(self.open_interest))
+
+        # Calculate freshness score based on price changes
+        if self._has_price_changed():
+            # Prices changed = fresh market activity
+            freshness_score = 1.0
+        else:
+            # Prices unchanged - use volume as proxy for activity
+            # Higher volume means more activity even if prices are stable
+            freshness_score = norm_volume
+
+        # Combine components with weights
+        # Adjust weights: w_vol=0.3, w_oi=0.3, w_fresh=0.4
+        activity_score = (
+            0.3 * norm_volume + 0.3 * norm_open_interest + 0.4 * freshness_score
+        )
+
+        return activity_score
+
+    @property
+    def moneyness_score(self) -> float:
+        """Calculate moneyness score: exp(-abs(mid - 50) / κ).
+
+        Returns:
+            Score between 0 and 1, where:
+            - 1.0 = mid price is exactly 50 cents (most balanced)
+            - Decreases exponentially as mid price moves away from 50
+        """
+        mid_value = float(self.mid)
+        abs_deviation = abs(mid_value - 50.0)
+        score = math.exp(-abs_deviation / self.KAPPA)
+        return score
+
+    @property
+    def taker_potential(self) -> float:
+        """Calculate taker potential: S^α * A^β * M^γ.
+
+        Combines spread score (S), activity score (A), and moneyness score (M)
+        with exponents to dampen noisy pillars.
+
+        Returns:
+            Taker potential score, where higher values indicate better
+            trading opportunities for takers.
+        """
+        spread_score = self.spread_score
+        activity_score = self.activity_score
+        moneyness_score = self.moneyness_score
+
+        taker_potential = (
+            spread_score**self.ALPHA
+            * activity_score**self.BETA
+            * moneyness_score**self.GAMMA
+        )
+
+        return float(taker_potential)
+
+    @property
+    def maker_potential(self) -> float:
+        """Calculate maker potential: P^α * L^β * exp(-stale/τ_upd).
+
+        Combines parity slack (P), liquidity (L), and stability (staleness)
+        to identify market-making opportunities.
+
+        Formula components:
+            - P = clip(spread / P_MAX, 0, 1) - parity slack/spread
+            - L = norm(liquidity_dollars) - resting liquidity proxy
+            - exp(-stale/τ_upd) - stability (prefer not stale, not whipsawing)
+
+        Returns:
+            Maker potential score, where higher values indicate better
+            market-making opportunities.
+        """
+        # Parity slack: P = clip(spread / P_MAX, 0, 1)
+        parity_slack = self.spread / self.P_MAX
+        parity_slack = max(0.0, min(1.0, parity_slack))
+
+        # Resting-liquidity proxy: L = norm(liquidity_dollars)
+        # Parse liquidity_dollars string to float
+        try:
+            liquidity_value = float(self.liquidity_dollars)
+        except (ValueError, TypeError):
+            liquidity_value = 0.0
+
+        # Normalize with cap at $500: x / (x + k)
+        # Using LIQUIDITY_CAP as the normalization parameter
+        liquidity_score = liquidity_value / (liquidity_value + self.LIQUIDITY_CAP)
+
+        # Stability: exp(-stale/τ_upd)
+        now = datetime.now(timezone.utc)
+        if self.updated_at:
+            # Ensure updated_at is timezone-aware
+            updated = self.updated_at
+            if updated.tzinfo is None:
+                updated = updated.replace(tzinfo=timezone.utc)
+            stale_seconds = (now - updated).total_seconds()
+            # Clamp to non-negative (shouldn't happen, but safety check)
+            stale_seconds = max(0.0, stale_seconds)
+        else:
+            # If no updated_at, assume very stale (large value)
+            stale_seconds = float("inf")
+
+        # Calculate stability component
+        if stale_seconds == float("inf"):
+            stability_score = 0.0
+        else:
+            stability_score = math.exp(-stale_seconds / self.TAU_UPD)
+
+        # Combine components with exponents
+        maker_potential = (
+            parity_slack**self.MAKER_ALPHA
+            * liquidity_score**self.MAKER_BETA
+            * stability_score
+        )
+
+        return float(maker_potential)
+
+    @property
+    def time_to_close_weight(self) -> float:
+        """Calculate time to close weight: T.
+
+        Weight function based on time until market closes:
+            - T = 1.0 if 0 < tt_close ≤ 2h
+            - T = 0.7 if 2h < tt_close ≤ 8h
+            - T = 0.4 if 8h < tt_close ≤ 24h
+            - T = 0.2 otherwise
+
+        Returns:
+            Weight between 0.2 and 1.0 based on time to close.
+        """
+        tt_close = self.tt_close
+
+        if 0 < tt_close <= 2:
+            return 1.0
+        elif 2 < tt_close <= 8:
+            return 0.7
+        elif 8 < tt_close <= 24:
+            return 0.4
+        else:
+            return 0.2
+
+    @property
+    def raw_score(self) -> float:
+        """Calculate raw score: w_taker * TakerPotential + w_maker * MakerPotential.
+
+        Combines taker and maker potentials with weights to create a unified score.
+
+        Returns:
+            Raw score combining taker and maker potentials.
+        """
+        taker_potential = self.taker_potential
+        maker_potential = self.maker_potential
+
+        raw_score = self.W_TAKER * taker_potential + self.W_MAKER * maker_potential
+
+        return float(raw_score)
+
+    @property
+    def score(self) -> float:
+        """Calculate final score: RawScore * T.
+
+        Applies time-to-close weight to the raw score to prioritize markets
+        that are closing soon.
+
+        Returns:
+            Final score combining raw score with time-to-close weight.
+        """
+        raw_score = self.raw_score
+        time_weight = self.time_to_close_weight
+
+        score = raw_score * time_weight
+
+        return float(score)
 
 
 @dataclass
@@ -346,6 +631,40 @@ class KalshiAPIService:
                 raise RuntimeError("Too many markets returned, possible infinite loop")
 
         return all_markets
+
+    def calculate_fees(self, price_cents: int, contracts: int = 1) -> Dict[str, int]:
+        """Calculate maker and taker fees for contracts at a given price.
+
+        Args:
+            price_cents: Contract price in cents (e.g., 50 for $0.50)
+            contracts: Number of contracts (default: 1)
+
+        Returns:
+            Dictionary with 'maker_fee' and 'taker_fee' in cents (rounded up).
+            Fees are calculated using:
+            - Taker fee: 0.07 × C × P × (1-P)
+            - Maker fee: 0.175 × C × P × (1-P)
+            Where C = contracts, P = price as decimal (price_cents / 100)
+            Fees are rounded up to the nearest cent.
+        """
+        # Convert price from cents to decimal (e.g., 50 cents -> 0.50)
+        price = price_cents / 100.0
+
+        # Calculate fees using the formulas (in dollars)
+        # Taker fee: 0.07 × C × P × (1-P)
+        taker_fee_dollars = 0.07 * contracts * price * (1 - price)
+
+        # Maker fee: 0.175 × C × P × (1-P)
+        maker_fee_dollars = 0.175 * contracts * price * (1 - price)
+
+        # Convert to cents and round up
+        taker_fee_cents = math.ceil(taker_fee_dollars * 100)
+        maker_fee_cents = math.ceil(maker_fee_dollars * 100)
+
+        return {
+            "maker_fee": maker_fee_cents,
+            "taker_fee": taker_fee_cents,
+        }
 
     async def close(self):
         """Close the HTTP client."""
