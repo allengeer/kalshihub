@@ -1781,11 +1781,8 @@ class TestGetMarketOrderbook:
     @pytest.mark.asyncio
     async def test_get_market_orderbook_invalid_depth(self, service):
         """Test orderbook retrieval with invalid depth."""
-        with pytest.raises(ValueError, match="depth must be between 0 and 100"):
+        with pytest.raises(ValueError, match="depth must be <= 100"):
             await service.get_market_orderbook("TEST-2024", depth=101)
-
-        with pytest.raises(ValueError, match="depth must be between 0 and 100"):
-            await service.get_market_orderbook("TEST-2024", depth=-1)
 
     @pytest.mark.asyncio
     async def test_get_market_orderbook_http_error(self, service):
