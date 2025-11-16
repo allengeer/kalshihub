@@ -639,6 +639,22 @@ async def _fetch_orderbook_and_update_market(
             current_maker = _get_field_value(
                 current_data if isinstance(current_data, dict) else {},
                 "maker_potential",
+            # Store both original (market data) and orderbook-based potentials
+            # separately. Original potentials are from market data calculations.
+            # Orderbook potentials are from deep scan with orderbook data.
+            market_ref.update(
+                {
+                    # Original potentials (from market data)
+                    "taker_potential": float(original_taker_potential),
+                    "maker_potential": float(original_maker_potential),
+                    "score": float(market.score),  # Original score
+                    # Orderbook-based potentials (from deep scan)
+                    "taker_potential_orderbook": float(updated_taker_potential),
+                    "maker_potential_orderbook": float(updated_maker_potential),
+                    "score_orderbook": float(updated_scores["score_enhanced"]),
+                    # Update timestamp
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
             )
 
             original_score_float = float(market.score)
