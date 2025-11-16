@@ -464,6 +464,33 @@ def _maybe_update_score_with_orderbook(
                     "fetching orderbook"
                 )
         elif change_type == "UPDATE":
+            # Skip if this update is only from an orderbook update (to prevent loops)
+            # Check if only orderbook-related fields or updated_at changed
+            orderbook_fields = {
+                "score_orderbook",
+                "taker_potential_orderbook",
+                "maker_potential_orderbook",
+                "updated_at",
+            }
+
+            # Get list of changed fields
+            changed_fields = set()
+            if old_fields:
+                # Fields that exist in new but not old, or have different values
+                for field_name in new_fields:
+                    old_value = _get_field_value(old_fields, field_name)
+                    new_value = _get_field_value(new_fields, field_name)
+                    if old_value != new_value:
+                        changed_fields.add(field_name)
+
+            # If only orderbook fields changed, skip to prevent loop
+            if changed_fields and changed_fields.issubset(orderbook_fields):
+                print(
+                    f"UPDATE: Skipping orderbook fetch for {ticker} - "
+                    f"only orderbook fields changed: {changed_fields}"
+                )
+                return
+
             # For UPDATE: trigger if score crossed from < 0.1 to >= 0.1
             old_score = _get_field_value(old_fields, "score") if old_fields else None
             if old_score is not None:
@@ -478,7 +505,8 @@ def _maybe_update_score_with_orderbook(
                 old_score_float = None
 
             if old_score_float is not None:
-                if new_score_float >= 0.1:
+                # Only trigger if score crossed from < 0.1 to >= 0.1
+                if old_score_float < 0.1 and new_score_float >= 0.1:
                     should_update = True
                     print(
                         f"UPDATE: Market {ticker} score crossed from "
@@ -584,6 +612,34 @@ async def _fetch_orderbook_and_update_market(
             db = market_dao._get_db()
             market_ref = db.collection("markets").document(ticker)
 
+            # Get current document to check existing values
+            current_doc = market_ref.get()
+            current_data = current_doc.to_dict() if current_doc.exists else {}
+
+            # Build update dict - only update fields that actually changed
+            # to avoid triggering unnecessary UPDATE events
+            update_dict = {
+                # Orderbook-based potentials (from deep scan) - always update these
+                "taker_potential_orderbook": float(updated_taker_potential),
+                "maker_potential_orderbook": float(updated_maker_potential),
+                "score_orderbook": float(updated_scores["score_enhanced"]),
+                # Update timestamp
+                "updated_at": firestore.SERVER_TIMESTAMP,
+            }
+
+            # Only update original fields if they're missing or different
+            # This prevents triggering UPDATE events when updating orderbook data
+            current_score = _get_field_value(
+                current_data if isinstance(current_data, dict) else {}, "score"
+            )
+            current_taker = _get_field_value(
+                current_data if isinstance(current_data, dict) else {},
+                "taker_potential",
+            )
+            current_maker = _get_field_value(
+                current_data if isinstance(current_data, dict) else {},
+                "maker_potential",
+            )
             # Store both original (market data) and orderbook-based potentials
             # separately. Original potentials are from market data calculations.
             # Orderbook potentials are from deep scan with orderbook data.
@@ -601,6 +657,20 @@ async def _fetch_orderbook_and_update_market(
                     "updated_at": firestore.SERVER_TIMESTAMP,
                 }
             )
+
+            original_score_float = float(market.score)
+            original_taker_float = float(original_taker_potential)
+            original_maker_float = float(original_maker_potential)
+
+            # Only update original fields if they're missing or changed
+            if current_score is None or float(current_score) != original_score_float:
+                update_dict["score"] = original_score_float
+            if current_taker is None or float(current_taker) != original_taker_float:
+                update_dict["taker_potential"] = original_taker_float
+            if current_maker is None or float(current_maker) != original_maker_float:
+                update_dict["maker_potential"] = original_maker_float
+
+            market_ref.update(update_dict)
 
             # Persist orderbook with calculated properties
             orderbook_dao.upsert_orderbook(
