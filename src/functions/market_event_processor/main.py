@@ -478,7 +478,7 @@ def _maybe_update_score_with_orderbook(
                 old_score_float = None
 
             if old_score_float is not None:
-                if old_score_float < 0.1 and new_score_float >= 0.1:
+                if new_score_float >= 0.1:
                     should_update = True
                     print(
                         f"UPDATE: Market {ticker} score crossed from "
