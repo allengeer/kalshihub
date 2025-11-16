@@ -9,6 +9,7 @@ from typing import Any, Dict, Optional
 
 import functions_framework
 from cloudevents.http import CloudEvent
+from firebase_admin import firestore
 from google.cloud.firestore_v1.types import Value
 from google.cloud.firestore_v1.types.document import MutableMapping
 from google.events.cloud import firestore as firestoredata
@@ -539,12 +540,15 @@ async def _fetch_orderbook_and_update_market(
             db = market_dao._get_db()
             market_ref = db.collection("markets").document(ticker)
 
-            # Update only the score-related fields
+            # Update score-related fields and updated_at timestamp
+            # updated_at must be updated so maker_potential stability score
+            # (exp(-stale_seconds / TAU_UPD)) reflects fresh orderbook data
             market_ref.update(
                 {
                     "score": updated_scores["score_enhanced"],
                     "taker_potential": updated_scores["taker_potential"],
                     "maker_potential": updated_scores["maker_potential"],
+                    "updated_at": firestore.SERVER_TIMESTAMP,
                 }
             )
 
