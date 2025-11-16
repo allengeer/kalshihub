@@ -181,6 +181,136 @@ class FirebaseSchemaManager:
                         },
                     },
                 },
+                "orderbooks": {
+                    "description": (
+                        "Orderbook data collection for Kalshi prediction markets"
+                    ),
+                    "fields": {
+                        "ticker": {
+                            "type": "string",
+                            "description": (
+                                "Market ticker this orderbook belongs to (primary key)"
+                            ),
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "yes": {
+                            "type": "array",
+                            "description": "List of yes bid price levels",
+                            "required": True,
+                        },
+                        "no": {
+                            "type": "array",
+                            "description": "List of no bid price levels",
+                            "required": True,
+                        },
+                        "yes_dollars": {
+                            "type": "array",
+                            "description": "List of yes bid price levels in dollars",
+                            "required": True,
+                        },
+                        "no_dollars": {
+                            "type": "array",
+                            "description": "List of no bid price levels in dollars",
+                            "required": True,
+                        },
+                        "best_yes_bid": {
+                            "type": "number",
+                            "description": "Best yes bid price in cents",
+                            "required": False,
+                        },
+                        "best_yes_bid_qty": {
+                            "type": "number",
+                            "description": "Quantity of best yes bid",
+                            "required": False,
+                        },
+                        "best_no_bid": {
+                            "type": "number",
+                            "description": "Best no bid price in cents",
+                            "required": False,
+                        },
+                        "best_no_bid_qty": {
+                            "type": "number",
+                            "description": "Quantity of best no bid",
+                            "required": False,
+                        },
+                        "yes_ask_l1": {
+                            "type": "number",
+                            "description": "Yes ask at level 1 in cents",
+                            "required": False,
+                        },
+                        "yes_ask_l1_qty": {
+                            "type": "number",
+                            "description": "Quantity of yes ask at level 1",
+                            "required": False,
+                        },
+                        "spread": {
+                            "type": "number",
+                            "description": "Spread between yes ask L1 and best yes bid",
+                            "required": False,
+                        },
+                        "mid": {
+                            "type": "number",
+                            "description": "Midpoint price in cents",
+                            "required": False,
+                        },
+                        "bid_depth": {
+                            "type": "number",
+                            "description": "YES-side bid depth",
+                            "required": False,
+                        },
+                        "ask_depth": {
+                            "type": "number",
+                            "description": "YES-side ask depth",
+                            "required": False,
+                        },
+                        "obi": {
+                            "type": "number",
+                            "description": "Orderbook imbalance",
+                            "required": False,
+                        },
+                        "micro": {
+                            "type": "number",
+                            "description": "Micro price in cents",
+                            "required": False,
+                        },
+                        "micro_tilt": {
+                            "type": "number",
+                            "description": "Micro tilt in cents",
+                            "required": False,
+                        },
+                        "score": {
+                            "type": "number",
+                            "description": "Calculated score for this orderbook",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "taker_potential": {
+                            "type": "number",
+                            "description": "Calculated taker potential",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "maker_potential": {
+                            "type": "number",
+                            "description": "Calculated maker potential",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "created_at": {
+                            "type": "timestamp",
+                            "description": "Record creation timestamp",
+                            "required": True,
+                            "indexed": True,
+                        },
+                        "updated_at": {
+                            "type": "timestamp",
+                            "description": "Record last update timestamp",
+                            "required": True,
+                            "indexed": True,
+                        },
+                    },
+                },
             }
         }
 
@@ -208,6 +338,17 @@ class FirebaseSchemaManager:
                 }
             )
 
+            # Deploy orderbooks collection
+            orderbooks_schema_ref = db.collection("_schema").document("orderbooks")
+            orderbooks_schema_ref.set(
+                {
+                    "version": "1.0.0",
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                    "definition": schema["collections"]["orderbooks"],
+                }
+            )
+
             # Create a sample document to ensure markets collection exists
             markets_ref = db.collection("markets")
             markets_sample = markets_ref.document("_schema_init")
@@ -225,6 +366,25 @@ class FirebaseSchemaManager:
                 }
             )
             markets_sample.delete()
+
+            # Create a sample document to ensure orderbooks collection exists
+            orderbooks_ref = db.collection("orderbooks")
+            orderbooks_sample = orderbooks_ref.document("_schema_init")
+            orderbooks_sample.set(
+                {
+                    "ticker": "_schema_init",
+                    "yes": [],
+                    "no": [],
+                    "yes_dollars": [],
+                    "no_dollars": [],
+                    "score": 0.0,
+                    "taker_potential": 0.0,
+                    "maker_potential": 0.0,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "updated_at": firestore.SERVER_TIMESTAMP,
+                }
+            )
+            orderbooks_sample.delete()
 
             # Deploy engine_events collection
             events_schema_ref = db.collection("_schema").document("engine_events")

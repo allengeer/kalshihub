@@ -18,10 +18,12 @@ from google.events.cloud import firestore as firestoredata
 try:
     from src.firebase.event_publisher import EventPublisher
     from src.firebase.market_dao import MarketDAO
+    from src.firebase.orderbook_dao import OrderbookDAO
     from src.kalshi.service import KalshiAPIService
 except ImportError:
     from firebase.event_publisher import EventPublisher  # type: ignore[no-redef]
     from firebase.market_dao import MarketDAO  # type: ignore[no-redef]
+    from firebase.orderbook_dao import OrderbookDAO  # type: ignore[no-redef]
     from kalshi.service import KalshiAPIService  # type: ignore[no-redef]
 
 
@@ -503,6 +505,10 @@ async def _fetch_orderbook_and_update_market(
                 project_id=firebase_project_id,
                 credentials_path=os.getenv("FIREBASE_CREDENTIALS_PATH"),
             )
+            orderbook_dao = OrderbookDAO(
+                project_id=firebase_project_id,
+                credentials_path=os.getenv("FIREBASE_CREDENTIALS_PATH"),
+            )
 
             # Get current market
             market = market_dao.get_market(ticker)
@@ -520,10 +526,10 @@ async def _fetch_orderbook_and_update_market(
                 print(f"No orderbook data returned for {ticker}")
                 return
 
+            orderbook = orderbook_response.orderbook
+
             # Update market scores with orderbook data
-            updated_scores = market.update_score_with_orderbook(
-                orderbook_response.orderbook
-            )
+            updated_scores = market.update_score_with_orderbook(orderbook)
 
             # Update market object with new scores
             # Note: We can't directly set properties on Market dataclass,
@@ -552,12 +558,22 @@ async def _fetch_orderbook_and_update_market(
                 }
             )
 
+            # Persist orderbook with calculated properties
+            orderbook_dao.upsert_orderbook(
+                orderbook=orderbook,
+                ticker=ticker,
+                score=updated_scores["score_enhanced"],
+                taker_potential=updated_scores["taker_potential"],
+                maker_potential=updated_scores["maker_potential"],
+            )
+
             print(
                 f"Updated market {ticker} scores: "
                 f"score={updated_scores['score_enhanced']:.4f}, "
                 f"taker={updated_scores['taker_potential']:.4f}, "
                 f"maker={updated_scores['maker_potential']:.4f}"
             )
+            print(f"Persisted orderbook for {ticker} with calculated properties")
 
     except Exception as e:
         print(f"ERROR updating market {ticker} with orderbook: {e}")
