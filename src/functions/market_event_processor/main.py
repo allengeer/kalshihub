@@ -492,61 +492,64 @@ async def _fetch_orderbook_and_update_market(
     """
     try:
         # Initialize services
-        kalshi_service = KalshiAPIService()
-        market_dao = MarketDAO(
-            project_id=firebase_project_id,
-            credentials_path=os.getenv("FIREBASE_CREDENTIALS_PATH"),
-        )
+        # Use async context manager to ensure proper cleanup of HTTP client
+        async with KalshiAPIService() as kalshi_service:
+            market_dao = MarketDAO(
+                project_id=firebase_project_id,
+                credentials_path=os.getenv("FIREBASE_CREDENTIALS_PATH"),
+            )
 
-        # Get current market
-        market = market_dao.get_market(ticker)
-        if not market:
-            print(f"Market {ticker} not found in database")
-            return
+            # Get current market
+            market = market_dao.get_market(ticker)
+            if not market:
+                print(f"Market {ticker} not found in database")
+                return
 
-        # Fetch orderbook with depth=3
-        print(f"Fetching orderbook for {ticker} with depth=3")
-        orderbook_response = await kalshi_service.get_market_orderbook(ticker, depth=3)
+            # Fetch orderbook with depth=3
+            print(f"Fetching orderbook for {ticker} with depth=3")
+            orderbook_response = await kalshi_service.get_market_orderbook(
+                ticker, depth=3
+            )
 
-        if not orderbook_response or not orderbook_response.orderbook:
-            print(f"No orderbook data returned for {ticker}")
-            return
+            if not orderbook_response or not orderbook_response.orderbook:
+                print(f"No orderbook data returned for {ticker}")
+                return
 
-        # Update market scores with orderbook data
-        updated_scores = market.update_score_with_orderbook(
-            orderbook_response.orderbook
-        )
+            # Update market scores with orderbook data
+            updated_scores = market.update_score_with_orderbook(
+                orderbook_response.orderbook
+            )
 
-        # Update market object with new scores
-        # Note: We can't directly set properties on Market dataclass,
-        # so we need to create a new Market object with updated values
-        # However, since score, taker_potential, and maker_potential are
-        # computed properties, we need to store them separately or
-        # update the market in a way that preserves them.
+            # Update market object with new scores
+            # Note: We can't directly set properties on Market dataclass,
+            # so we need to create a new Market object with updated values
+            # However, since score, taker_potential, and maker_potential are
+            # computed properties, we need to store them separately or
+            # update the market in a way that preserves them.
 
-        # Actually, looking at MarketDAO._market_to_dict, it stores score,
-        # taker_potential, and maker_potential. But these are computed properties.
-        # We need to update the market document directly with the new values.
+            # Actually, looking at MarketDAO._market_to_dict, it stores score,
+            # taker_potential, and maker_potential. But these are computed properties.
+            # We need to update the market document directly with the new values.
 
-        # Update the market document with new score values
-        db = market_dao._get_db()
-        market_ref = db.collection("markets").document(ticker)
+            # Update the market document with new score values
+            db = market_dao._get_db()
+            market_ref = db.collection("markets").document(ticker)
 
-        # Update only the score-related fields
-        market_ref.update(
-            {
-                "score": updated_scores["score_enhanced"],
-                "taker_potential": updated_scores["taker_potential"],
-                "maker_potential": updated_scores["maker_potential"],
-            }
-        )
+            # Update only the score-related fields
+            market_ref.update(
+                {
+                    "score": updated_scores["score_enhanced"],
+                    "taker_potential": updated_scores["taker_potential"],
+                    "maker_potential": updated_scores["maker_potential"],
+                }
+            )
 
-        print(
-            f"Updated market {ticker} scores: "
-            f"score={updated_scores['score_enhanced']:.4f}, "
-            f"taker={updated_scores['taker_potential']:.4f}, "
-            f"maker={updated_scores['maker_potential']:.4f}"
-        )
+            print(
+                f"Updated market {ticker} scores: "
+                f"score={updated_scores['score_enhanced']:.4f}, "
+                f"taker={updated_scores['taker_potential']:.4f}, "
+                f"maker={updated_scores['maker_potential']:.4f}"
+            )
 
     except Exception as e:
         print(f"ERROR updating market {ticker} with orderbook: {e}")
