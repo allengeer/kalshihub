@@ -546,9 +546,27 @@ async def _fetch_orderbook_and_update_market(
 
             orderbook = orderbook_response.orderbook
 
+            # Log original potentials (before orderbook update)
+            original_taker_potential = market.taker_potential
+            original_maker_potential = market.maker_potential
+            print(
+                f"Original potentials for {ticker}: "
+                f"taker={original_taker_potential:.4f}, "
+                f"maker={original_maker_potential:.4f}"
+            )
+
             # Update market scores with orderbook data
             updated_scores = market.update_score_with_orderbook(
                 orderbook_response.orderbook
+            )
+
+            # Log updated potentials (after orderbook update)
+            updated_taker_potential = updated_scores["taker_potential"]
+            updated_maker_potential = updated_scores["maker_potential"]
+            print(
+                f"Updated potentials for {ticker}: "
+                f"taker={updated_taker_potential:.4f}, "
+                f"maker={updated_maker_potential:.4f}"
             )
 
             # Update market object with new scores
