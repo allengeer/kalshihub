@@ -584,14 +584,20 @@ async def _fetch_orderbook_and_update_market(
             db = market_dao._get_db()
             market_ref = db.collection("markets").document(ticker)
 
-            # Update score-related fields and updated_at timestamp
-            # updated_at must be updated so maker_potential stability score
-            # (exp(-stale_seconds / TAU_UPD)) reflects fresh orderbook data
+            # Store both original (market data) and orderbook-based potentials
+            # separately. Original potentials are from market data calculations.
+            # Orderbook potentials are from deep scan with orderbook data.
             market_ref.update(
                 {
-                    "score": updated_scores["score_enhanced"],
-                    "taker_potential": updated_scores["taker_potential"],
-                    "maker_potential": updated_scores["maker_potential"],
+                    # Original potentials (from market data)
+                    "taker_potential": float(original_taker_potential),
+                    "maker_potential": float(original_maker_potential),
+                    "score": float(market.score),  # Original score
+                    # Orderbook-based potentials (from deep scan)
+                    "taker_potential_orderbook": float(updated_taker_potential),
+                    "maker_potential_orderbook": float(updated_maker_potential),
+                    "score_orderbook": float(updated_scores["score_enhanced"]),
+                    # Update timestamp
                     "updated_at": firestore.SERVER_TIMESTAMP,
                 }
             )
@@ -606,10 +612,16 @@ async def _fetch_orderbook_and_update_market(
             )
 
             print(
-                f"Updated market {ticker} scores: "
+                f"Updated market {ticker} - Original scores: "
+                f"score={market.score:.4f}, "
+                f"taker={original_taker_potential:.4f}, "
+                f"maker={original_maker_potential:.4f}"
+            )
+            print(
+                f"Updated market {ticker} - Orderbook scores: "
                 f"score={updated_scores['score_enhanced']:.4f}, "
-                f"taker={updated_scores['taker_potential']:.4f}, "
-                f"maker={updated_scores['maker_potential']:.4f}"
+                f"taker={updated_taker_potential:.4f}, "
+                f"maker={updated_maker_potential:.4f}"
             )
             print(f"Persisted orderbook for {ticker} with calculated properties")
 
